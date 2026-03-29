@@ -3,24 +3,61 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
 
-# --- CONFIGURATION ET STYLE CSS ---
+# --- CONFIGURATION ET STYLE CSS (DOUBLE THEME + SOBRE) ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 st.markdown("""
     <style>
+    /* --- THEME SOMBRE (Dark Modern) par défaut --- */
     .stApp { background-color: #0d1117; }
+    
     .main-card {
         background-color: #161b22;
         padding: 30px;
-        border-radius: 15px;
+        border-radius: 12px;
         border: 1px solid #30363d;
         text-align: center;
         margin-bottom: 25px;
     }
     .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
-    .stButton>button { border-radius: 8px; font-weight: bold; }
+    .reward-text { color: #3fb950; font-weight: bold; font-size: 1.2em; }
+    .progress-label { color: white; font-weight: bold; }
+    
+    .stButton>button { border-radius: 6px; font-weight: bold; border: 1px solid transparent; }
+    /* Style bouton Standard */
+    .stButton>button[key="std_btn"] { background-color: #238636; color: white; }
+    
+    /* Style de la barre de progression (Verte) */
     .stProgress > div > div > div > div { background-color: #238636; }
+    
+    /* Style Onglets */
+    .stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 1px solid #30363d; }
+    .stTabs [data-baseweb="tab"] { color: #8b949e; }
+    .stTabs [data-baseweb="tab"]:hover { color: white; }
+    
+    /* --- AJUSTEMENTS POUR THEME LUMINEUX (Soft Pastel) --- */
+    /* Streamlit Cloud change automatiquement 'data-theme' en 'light' */
+    @media (prefers-color-scheme: light) {
+        .stApp { background-color: #FAF5F0; }
+        .main-card {
+            background-color: #D0E1F9; /* Pastel Bleu */
+            border-radius: 30px; /* Coins très arrondis */
+            border: none;
+            box-shadow: 0px 4px 15px rgba(0,0,0,0.05); /* Ombres douces */
+        }
+        .stat-label { color: #5c6c7c; }
+        .stat-value { color: #2e3b47; }
+        .reward-text { color: #A8E6CF; /* Pastel Menthe */ }
+        .progress-label { color: #2e3b47; }
+        
+        .stButton>button[key="std_btn"] { background-color: #A8E6CF; color: #2e3b47; }
+        .stProgress > div > div > div > div { background-color: #A8E6CF; }
+        
+        .stTabs [data-baseweb="tab-list"] { border-bottom: 2px solid #D0E1F9; }
+        .stTabs [data-baseweb="tab"] { color: #5c6c7c; }
+        .stTabs [data-baseweb="tab"]:hover { color: #2e3b47; }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -28,12 +65,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- LOGIQUE DE SAISON AUTOMATIQUE ---
 now = datetime.now()
-# Si on est avant septembre, l'année de début est l'année précédente
 start_year = now.year if now.month >= 9 else now.year - 1
 date_debut_saison = datetime(start_year, 9, 1)
 date_fin_saison = datetime(start_year + 1, 8, 31)
 
-st.sidebar.info(f"📅 Saison active : {start_year}-{start_year+1}")
+st.sidebar.info(f"Saison active : {start_year}-{start_year+1}")
 
 # --- CALCUL DU DÛ DYNAMIQUE ---
 def get_theo(df_conges, start_date):
@@ -49,8 +85,6 @@ def get_theo(df_conges, start_date):
                 dict_conges[d_obj] = float(row['type'])
             except: continue
 
-    # Liste des jours fériés (Simplifiée : à mettre à jour ou automatiser plus tard)
-    # Pour l'instant, on garde les fixes et les mobiles de 2025-2026
     feries = [date(start_year,11,11), date(start_year,12,25), date(start_year+1,1,1), date(start_year+1,5,1)]
 
     while curr < hier:
@@ -67,7 +101,6 @@ def get_theo(df_conges, start_date):
 df_heures_raw = conn.read(worksheet="Feuille 1", ttl=0)
 df_conges_raw = conn.read(worksheet="Conges", ttl=0)
 
-# Fonction de filtrage par saison
 def filter_by_season(df, start_date, end_date):
     if df.empty: return df
     df['date_dt'] = pd.to_datetime(df['date'], dayfirst=True)
@@ -89,10 +122,10 @@ jours_repos = delta / 7.2 if delta > 0 else 0
 
 # --- INTERFACE ---
 progression = min(fait / OBJECTIF_ANNUEL, 1.0)
-st.write(f"📊 **Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
+st.markdown(f'<p class="progress-label">Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h</p>', unsafe_allow_html=True)
 st.progress(progression)
 
-st.markdown("### ⏱️ Annualisation")
+st.markdown("### Annualisation")
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta = int(abs(delta))
 m_delta = int((abs(delta) - h_delta) * 60)
@@ -103,7 +136,7 @@ st.markdown(f"""
         <h1 style="color: {color}; font-size: 4em; margin: 10px 0;">
             {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
         </h1>
-        {f'<p style="color: #3fb950; font-weight: bold; font-size: 1.2em;">✨ Équivalent à {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
+        {f'<p class="reward-text">Équivalent à {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -114,13 +147,13 @@ c2.markdown(f'<p class="stat-label">DÛ (Saison)</p><p class="stat-value">{theo:
 st.divider()
 
 # --- ONGLETS ---
-tab_h, tab_c = st.tabs(["🕒 Saisie Heures", "🌴 Gestion Congés"])
+tab_h, tab_c = st.tabs(["Saisie Heures", "Gestion Congés"])
 
 with tab_h:
     today_wd = datetime.now().weekday()
     std_h, std_m = (7, 30) if today_wd <= 1 else (7, 0)
     
-    if st.button(f"🚀 Valider ma journée standard ({std_h}h{std_m:02d})", use_container_width=True, type="primary"):
+    if st.button(f"Valider journée standard ({std_h}h{std_m:02d})", use_container_width=True, type="primary", key="std_btn"):
         new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": std_h + std_m/60}])
         updated = pd.concat([df_heures_raw, new_row], ignore_index=True)
         conn.update(worksheet="Feuille 1", data=updated)
@@ -139,8 +172,8 @@ with tab_h:
         st.write("**Dernières saisies (Saison) :**")
         for i, row in df_heures.iloc[::-1].head(5).iterrows():
             col_t, col_b = st.columns([4, 1])
-            col_t.write(f"📅 {row['date']} : {row['val']:.2f}h")
-            if col_b.button("🗑️", key=f"del_h_{i}"):
+            col_t.write(f"Date : {row['date']} | Durée : {row['val']:.2f}h")
+            if col_b.button("Suppr.", key=f"del_h_{i}"):
                 df_heures_raw = df_heures_raw.drop(df_heures_raw[df_heures_raw['date'] == row['date']].index)
                 conn.update(worksheet="Feuille 1", data=df_heures_raw)
                 st.rerun()
