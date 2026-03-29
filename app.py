@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 
 # --- CONFIGURATION ET STYLE CSS ---
-st.set_page_config(page_title="Work Tracker", layout="centered")
+st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 st.markdown("""
     <style>
@@ -20,31 +20,38 @@ st.markdown("""
     .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
     .stButton>button { border-radius: 8px; font-weight: bold; }
-    /* Style pour la barre de progression custom si besoin */
     .stProgress > div > div > div > div { background-color: #238636; }
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# --- LOGIQUE DE SAISON AUTOMATIQUE ---
+now = datetime.now()
+# Si on est avant septembre, l'année de début est l'année précédente
+start_year = now.year if now.month >= 9 else now.year - 1
+date_debut_saison = datetime(start_year, 9, 1)
+date_fin_saison = datetime(start_year + 1, 8, 31)
+
+st.sidebar.info(f"📅 Saison active : {start_year}-{start_year+1}")
+
 # --- CALCUL DU DÛ DYNAMIQUE ---
-def get_theo(df_conges):
+def get_theo(df_conges, start_date):
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    total, curr = 0, datetime(2025, 9, 1)
+    total, curr = 0, start_date
     
     dict_conges = {}
     if not df_conges.empty:
         for _, row in df_conges.iterrows():
             try:
                 d_val = row['date']
-                if isinstance(d_val, str):
-                    d_obj = pd.to_datetime(d_val, dayfirst=True).date()
-                else:
-                    d_obj = d_val.date() if hasattr(d_val, 'date') else pd.to_datetime(d_val).date()
+                d_obj = pd.to_datetime(d_val, dayfirst=True).date() if isinstance(d_val, str) else d_val.date()
                 dict_conges[d_obj] = float(row['type'])
             except: continue
 
-    feries = [date(2025,11,11), date(2025,12,25), date(2026,1,1), date(2026,4,13), date(2026,5,1)]
+    # Liste des jours fériés (Simplifiée : à mettre à jour ou automatiser plus tard)
+    # Pour l'instant, on garde les fixes et les mobiles de 2025-2026
+    feries = [date(start_year,11,11), date(start_year,12,25), date(start_year+1,1,1), date(start_year+1,5,1)]
 
     while curr < hier:
         d = curr.date()
@@ -56,30 +63,36 @@ def get_theo(df_conges):
         curr += timedelta(days=1)
     return total
 
-# --- RÉCUPÉRATION DES DONNÉES ---
-df_heures = conn.read(worksheet="Feuille 1", ttl=0)
-df_conges = conn.read(worksheet="Conges", ttl=0)
+# --- RÉCUPÉRATION ET FILTRAGE DES DONNÉES ---
+df_heures_raw = conn.read(worksheet="Feuille 1", ttl=0)
+df_conges_raw = conn.read(worksheet="Conges", ttl=0)
 
-BASE_FAIT = 992.25
-OBJECTIF_ANNUEL = 1607.0 # À modifier selon ton contrat
+# Fonction de filtrage par saison
+def filter_by_season(df, start_date, end_date):
+    if df.empty: return df
+    df['date_dt'] = pd.to_datetime(df['date'], dayfirst=True)
+    mask = (df['date_dt'] >= start_date) & (df['date_dt'] <= end_date)
+    return df.loc[mask].drop(columns=['date_dt'])
 
-theo = get_theo(df_conges)
+df_heures = filter_by_season(df_heures_raw, date_debut_saison, date_fin_saison)
+df_conges = filter_by_season(df_conges_raw, date_debut_saison, date_fin_saison)
+
+# NOTE : La BASE_FAIT de 992.25h ne s'applique qu'à la saison 2025-2026
+current_base = 992.25 if start_year == 2025 else 0.0
+OBJECTIF_ANNUEL = 1607.0
+
+theo = get_theo(df_conges, date_debut_saison)
 total_saisi = df_heures['val'].sum() if not df_heures.empty else 0
-fait = BASE_FAIT + total_saisi
+fait = current_base + total_saisi
 delta = fait - theo
-
-# Calcul des jours de repos (moyenne 7.2h)
 jours_repos = delta / 7.2 if delta > 0 else 0
 
-# --- BARRE DE PROGRESSION ---
+# --- INTERFACE ---
 progression = min(fait / OBJECTIF_ANNUEL, 1.0)
-st.write(f"📊 **Objectif Annuel : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
+st.write(f"📊 **Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
 st.progress(progression)
 
-# --- INTERFACE PRINCIPALE ---
 st.markdown("### ⏱️ Annualisation")
-
-# Affichage du Delta
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta = int(abs(delta))
 m_delta = int((abs(delta) - h_delta) * 60)
@@ -94,11 +107,9 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown(f'<p class="stat-label">FAIT (Total)</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
-with col2:
-    st.markdown(f'<p class="stat-label">DÛ (Théorique)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
+c1, c2 = st.columns(2)
+c1.markdown(f'<p class="stat-label">FAIT (Saison)</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
+c2.markdown(f'<p class="stat-label">DÛ (Saison)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -107,56 +118,39 @@ tab_h, tab_c = st.tabs(["🕒 Saisie Heures", "🌴 Gestion Congés"])
 
 with tab_h:
     today_wd = datetime.now().weekday()
-    std_h = 7
-    std_m = 30 if today_wd <= 1 else 0
+    std_h, std_m = (7, 30) if today_wd <= 1 else (7, 0)
     
-    st.subheader("Saisie rapide")
     if st.button(f"🚀 Valider ma journée standard ({std_h}h{std_m:02d})", use_container_width=True, type="primary"):
         new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": std_h + std_m/60}])
-        updated = pd.concat([df_heures, new_row], ignore_index=True)
+        updated = pd.concat([df_heures_raw, new_row], ignore_index=True)
         conn.update(worksheet="Feuille 1", data=updated)
         st.rerun()
 
-    st.write("---")
-    with st.expander("Saisie précise (Heures Sup / Retard)"):
-        c1, c2 = st.columns(2)
-        h_in = c1.number_input("Heures", min_value=0, step=1, value=std_h)
-        m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1, value=std_m)
-        if st.button("Enregistrer la durée précise", use_container_width=True):
+    with st.expander("Saisie précise"):
+        h_in = st.number_input("Heures", min_value=0, step=1, value=std_h)
+        m_in = st.number_input("Minutes", min_value=0, max_value=59, step=1, value=std_m)
+        if st.button("Enregistrer précisément", use_container_width=True):
             new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": h_in + m_in/60}])
-            updated = pd.concat([df_heures, new_row], ignore_index=True)
+            updated = pd.concat([df_heures_raw, new_row], ignore_index=True)
             conn.update(worksheet="Feuille 1", data=updated)
             st.rerun()
 
-    st.write("**Dernières saisies :**")
     if not df_heures.empty:
+        st.write("**Dernières saisies (Saison) :**")
         for i, row in df_heures.iloc[::-1].head(5).iterrows():
-            c_txt, c_del = st.columns([4, 1])
-            c_txt.write(f"📅 {row['date']} : {row['val']:.2f}h")
-            if c_del.button("🗑️", key=f"del_h_{i}"):
-                df_heures = df_heures.drop(i)
-                conn.update(worksheet="Feuille 1", data=df_heures)
+            col_t, col_b = st.columns([4, 1])
+            col_t.write(f"📅 {row['date']} : {row['val']:.2f}h")
+            if col_b.button("🗑️", key=f"del_h_{i}"):
+                df_heures_raw = df_heures_raw.drop(df_heures_raw[df_heures_raw['date'] == row['date']].index)
+                conn.update(worksheet="Feuille 1", data=df_heures_raw)
                 st.rerun()
 
 with tab_c:
     st.subheader("Déclarer un congé")
-    date_abs = st.date_input("Date du congé", value=datetime.now())
-    type_abs = st.radio("Durée", ["Journée entière", "Demi-journée"], horizontal=True)
-    val_abs = 1.0 if type_abs == "Journée entière" else 0.5
-    
+    date_abs = st.date_input("Date", value=datetime.now())
+    type_abs = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
     if st.button("Enregistrer l'absence", use_container_width=True):
-        new_c = pd.DataFrame([{"date": date_abs.strftime("%d/%m/%Y"), "type": val_abs}])
-        updated_c = pd.concat([df_conges, new_c], ignore_index=True)
+        new_c = pd.DataFrame([{"date": date_abs.strftime("%d/%m/%Y"), "type": 1.0 if type_abs == "Journée" else 0.5}])
+        updated_c = pd.concat([df_conges_raw, new_c], ignore_index=True)
         conn.update(worksheet="Conges", data=updated_c)
         st.rerun()
-
-    st.write("---")
-    if not df_conges.empty:
-        st.write("**Congés enregistrés :**")
-        for i, row in df_conges.iterrows():
-            col_txt, col_del = st.columns([4, 1])
-            col_txt.write(f"📅 {row['date']} ({'Entier' if row['type']==1 else 'Demi'})")
-            if col_del.button("🗑️", key=f"del_c_{i}"):
-                df_conges = df_conges.drop(i)
-                conn.update(worksheet="Conges", data=df_conges)
-                st.rerun()
