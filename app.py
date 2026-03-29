@@ -40,6 +40,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- CONNEXION ET CALCULS ---
+# Remplacer l'ancienne ligne de connexion par celle-ci :
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_theo():
