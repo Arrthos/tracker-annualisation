@@ -13,45 +13,82 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# Bouton dans la barre latérale
+# Bouton discret dans la barre latérale
 with st.sidebar:
-    st.button("Changer de thème (Clair/Sombre)", on_click=toggle_theme, use_container_width=True)
+    st.button("Switch Mode (Clair/Sombre)", on_click=toggle_theme, use_container_width=True)
     
-# --- CSS DYNAMIQUE ---
+# --- CSS DYNAMIQUE ET GLASSY (SANS EMOJIS) ---
+
+# Prop A : PURE GLASS (Dark)
 dark_css = """
-    .stApp { background-color: #0d1117; }
+    /* Fond dégradé sombre flouté */
+    .stApp {
+        background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%);
+        background-attachment: fixed;
+    }
+    
+    /* Cartes Glassy (Givré) */
     .main-card {
-        background-color: #161b22;
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
         padding: 30px;
         border-radius: 12px;
-        border: 1px solid #30363d;
+        border: 1px solid rgba(255, 255, 255, 0.1); /* Bordure ultra-fine */
         text-align: center;
         margin-bottom: 25px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     }
-    .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
+    
+    .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; margin-bottom: 5px; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #3fb950; font-weight: bold; font-size: 1.2em; }
     .progress-label { color: white; font-weight: bold; }
-    .stButton>button[key="std_btn"] { background-color: #238636; color: white; }
+    
+    /* Bouton Standard Vert */
+    .stButton>button[key="std_btn"] {
+        background-color: #238636;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    /* Barre de progression verte */
     .stProgress > div > div > div > div { background-color: #238636; }
 """
 
+# Prop B : LIGHT FROSTY (Light)
 light_css = """
-    .stApp { background-color: #FAF5F0; }
+    /* Fond très clair et doux */
+    .stApp {
+        background-color: #FAF5F0;
+    }
+    
+    /* Cartes Glassy Douces (Givré) */
     .main-card {
-        background-color: #D0E1F9;
+        background: rgba(208, 225, 249, 0.6); /* Pastel Bleu transparent */
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
         padding: 30px;
-        border-radius: 30px;
-        border: none;
+        border-radius: 30px; /* Coins très arrondis */
+        border: 1px solid rgba(255, 255, 255, 0.2);
         text-align: center;
         margin-bottom: 25px;
         box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
     }
+    
     .stat-label { color: #5c6c7c; font-size: 0.9em; margin-bottom: 5px; }
     .stat-value { color: #2e3b47; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #238636; font-weight: bold; font-size: 1.2em; }
     .progress-label { color: #2e3b47; font-weight: bold; }
-    .stButton>button[key="std_btn"] { background-color: #A8E6CF; color: #2e3b47; }
+    
+    /* Bouton Standard Menthe */
+    .stButton>button[key="std_btn"] {
+        background-color: #A8E6CF;
+        color: #2e3b47;
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+    
+    /* Barre de progression menthe */
     .stProgress > div > div > div > div { background-color: #A8E6CF; }
 """
 
