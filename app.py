@@ -102,11 +102,23 @@ h_in = c1.number_input("Heures", min_value=0, step=1, key="h")
 m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1, key="m")
 
 if st.button("Valider la saisie"):
-    new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": h_in + m_in/60}])
-    updated_df = pd.concat([df, new_row], ignore_index=True) if not df.empty else new_row
-    conn.update(data=updated_df)
+    # 1. Préparation de la nouvelle ligne
+    new_row = pd.DataFrame([{
+        "date": datetime.now().strftime("%d/%m/%Y"), 
+        "val": h_in + m_in/60
+    }])
+    
+    # 2. Fusion avec les anciennes données
+    if df.empty:
+        updated_df = new_row
+    else:
+        updated_df = pd.concat([df, new_row], ignore_index=True)
+    
+    # 3. C'est CETTE LIGNE qui fait la mise à jour vers Google Sheets
+    conn.update(data=updated_df) 
+    
+    st.success("Enregistré dans Google Sheets !")
     st.rerun()
-
 # Section Historique
 st.markdown("#### Historique des saisies")
 if not df.empty:
