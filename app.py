@@ -3,55 +3,119 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION ET STYLE CSS ---
 st.set_page_config(page_title="Work Tracker", layout="centered")
 
-# Connexion à Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+st.markdown("""
+    <style>
+    /* Fond principal */
+    .stApp { background-color: #0d1117; }
+    
+    /* Carte Situation Actuelle */
+    .main-card {
+        background-color: #161b22;
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #30363d;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    
+    /* Libellés FAIT / DÛ */
+    .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
+    .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
+    
+    /* Bouton Valider */
+    .stButton>button {
+        background-color: #238636;
+        color: white;
+        border-radius: 8px;
+        width: 100%;
+        border: none;
+        height: 45px;
+        font-weight: bold;
+    }
+    .stButton>button:hover { background-color: #2ea043; border: none; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- CALCULS ---
-BASE_FAIT = 992.25
-DATE_DEBUT = datetime(2025, 9, 1)
+# --- CONNEXION ET CALCULS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_theo():
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    total, curr = 0, DATE_DEBUT
-    # ... (tes calculs habituels de congés et jours fériés)
+    total, curr = 0, datetime(2025, 9, 1)
+    conges = {date(2025,10,14): 0.5, date(2025,10,20): 1.0, date(2026,2,18): 0.5}
+    for i in range(12):
+        d = date(2026,1,19) + timedelta(days=i)
+        if d.weekday() < 5: conges[d] = 1.0
+    feries = [date(2025,11,11), date(2025,12,25), date(2026,1,1)]
+    while curr < hier:
+        d = curr.date()
+        if curr.weekday() < 5:
+            h_jour = 7.5 if curr.weekday() <= 1 else 7.0
+            if d in feries: pass
+            elif d in conges: total += h_jour * (1 - conges[d])
+            else: total += h_jour
+        curr += timedelta(days=1)
     return total
 
-# --- LOGIQUE DE DONNÉES ---
-# Lire les données depuis Google Sheets
-df = conn.read(ttl=0) # ttl=0 pour forcer la lecture fraîche
-
-# --- INTERFACE ---
-st.title("⏱️ Work Tracker")
-
-fait = BASE_FAIT + (df['val'].sum() if not df.empty else 0)
+# --- RÉCUPÉRATION DONNÉES ---
+df = conn.read(ttl=0)
+BASE_FAIT = 992.25
 theo = get_theo()
+total_saisi = df['val'].sum() if not df.empty else 0
+fait = BASE_FAIT + total_saisi
 delta = fait - theo
 
-# Affichage du Delta (Gros compteur)
-color = "#238636" if delta >= 0 else "#da3633"
-st.markdown(f"<h1 style='text-align:center; color:{color};'>{' + ' if delta>=0 else ' - '}{abs(delta):.2f}h</h1>", unsafe_allow_html=True)
+# --- INTERFACE ---
+st.markdown("### ⏱️ Annualisation")
 
-# Saisie
-st.subheader("Ajouter des heures")
+# Bloc Situation Actuelle
+color = "#238636" if delta >= 0 else "#da3633"
+h_delta = int(abs(delta))
+m_delta = int((abs(delta) - h_delta) * 60)
+
+st.markdown(f"""
+    <div class="main-card">
+        <p style="color: #8b949e; font-size: 0.9em;">Situation Actuelle</p>
+        <h1 style="color: {color}; font-size: 4em; margin: 10px 0;">
+            {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
+        </h1>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Ligne FAIT / DÛ
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown(f'<p class="stat-label">FAIT</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
+with col2:
+    st.markdown(f'<p class="stat-label">DÛ</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
+
+st.divider()
+
+# Section Saisie
+st.markdown("#### Ajouter des heures")
 c1, c2 = st.columns(2)
-h_in = c1.number_input("Heures", min_value=0, step=1)
-m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1)
+h_in = c1.number_input("Heures", min_value=0, step=1, key="h")
+m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1, key="m")
 
 if st.button("Valider la saisie"):
     new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": h_in + m_in/60}])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
+    updated_df = pd.concat([df, new_row], ignore_index=True) if not df.empty else new_row
     conn.update(data=updated_df)
     st.rerun()
 
-# Historique avec suppression
-st.subheader("Historique")
-for i, row in df.iterrows():
-    col_t, col_b = st.columns([4, 1])
-    col_t.write(f"{row['date']} : {row['val']}h")
-    if col_b.button("🗑️", key=f"del_{i}"):
-        df = df.drop(i)
-        conn.update(data=df)
-        st.rerun()
+# Section Historique
+st.markdown("#### Historique des saisies")
+if not df.empty:
+    for i, row in df.iloc[::-1].iterrows(): # Affichage du plus récent au plus ancien
+        with st.container():
+            col_t, col_b = st.columns([4, 1])
+            col_t.markdown(f"📅 {row['date']} : **{row['val']:.2f}h**")
+            if col_b.button("🗑️", key=f"del_{i}"):
+                df = df.drop(i)
+                conn.update(data=df)
+                st.rerun()
+else:
+    st.info("Aucune saisie pour le moment.")
