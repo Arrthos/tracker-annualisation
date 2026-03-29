@@ -20,6 +20,8 @@ st.markdown("""
     .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
     .stButton>button { border-radius: 8px; font-weight: bold; }
+    /* Style pour la barre de progression custom si besoin */
+    .stProgress > div > div > div > div { background-color: #238636; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -59,6 +61,8 @@ df_heures = conn.read(worksheet="Feuille 1", ttl=0)
 df_conges = conn.read(worksheet="Conges", ttl=0)
 
 BASE_FAIT = 992.25
+OBJECTIF_ANNUEL = 1607.0 # À modifier selon ton contrat
+
 theo = get_theo(df_conges)
 total_saisi = df_heures['val'].sum() if not df_heures.empty else 0
 fait = BASE_FAIT + total_saisi
@@ -66,6 +70,11 @@ delta = fait - theo
 
 # Calcul des jours de repos (moyenne 7.2h)
 jours_repos = delta / 7.2 if delta > 0 else 0
+
+# --- BARRE DE PROGRESSION ---
+progression = min(fait / OBJECTIF_ANNUEL, 1.0)
+st.write(f"📊 **Objectif Annuel : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
+st.progress(progression)
 
 # --- INTERFACE PRINCIPALE ---
 st.markdown("### ⏱️ Annualisation")
