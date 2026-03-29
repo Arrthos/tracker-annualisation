@@ -3,12 +3,16 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
 
-# --- CONFIGURATION INITIALE ---
-st.set_page_config(page_title="Work Tracker Pro", layout="centered")
+# --- 1. CONFIGURATION DE LA PAGE ---
+st.set_page_config(
+    page_title="Work Tracker Pro",
+    page_icon="https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png",
+    layout="centered"
+)
 
-# --- CONFIGURATION DE L'ICÔNE MOBILE (HEAD HTML) ---
-# Utilisation du lien "Raw" de ton GitHub pour l'image_11.png
-icon_url = "https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png"
+# --- 2. CONFIGURATION DE L'ICÔNE MOBILE (HEAD HTML) ---
+# Le '?v=5' force le téléphone à recharger l'image et ignorer l'ancienne icône en cache.
+icon_url = "https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png?v=5"
 
 st.markdown(f"""
     <head>
@@ -17,7 +21,7 @@ st.markdown(f"""
     </head>
     """, unsafe_allow_html=True)
 
-# --- GESTION DU THEME ---
+# --- 3. GESTION DU THÈME ---
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
@@ -28,46 +32,52 @@ with st.sidebar:
     st.button("Switch Mode (Clair/Sombre)", on_click=toggle_theme, use_container_width=True)
     st.markdown("<style>.stButton>button { box-shadow: 0px 2px 5px rgba(0,0,0,0.1); }</style>", unsafe_allow_html=True)
 
-# --- CSS DYNAMIQUE ET GLASSY ---
-dark_css = """
-    .stApp { background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%); background-attachment: fixed; }
-    .main-card {
+# --- 4. STYLE CSS (GLASSY + OMBRES + LISIBILITÉ) ---
+dark_css = f"""
+    .stApp {{ background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%); background-attachment: fixed; }}
+    .main-card {{
         background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         padding: 30px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
         text-align: center; margin-bottom: 25px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
-    .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; }
-    .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
-    .reward-text { color: #3fb950; font-weight: bold; font-size: 1.2em; }
-    .progress-label { color: white; font-weight: bold; }
-    h3 { color: white !important; }
-    .stTabs [data-baseweb="tab"] { color: #8b949e; }
-    .stButton>button[key="std_btn"] { background-color: #238636; color: white; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); }
-    .stProgress > div > div > div > div { background-color: #238636; }
+    }}
+    .stat-label {{ color: rgba(255, 255, 255, 0.6); font-size: 0.9em; }}
+    .stat-value {{ color: white; font-size: 1.8em; font-weight: bold; }}
+    .reward-text {{ color: #3fb950; font-weight: bold; font-size: 1.2em; }}
+    .progress-label {{ color: white; font-weight: bold; }}
+    h3 {{ color: white !important; }}
+    .stTabs [data-baseweb="tab"] {{ color: #8b949e; }}
+    .stButton>button[key="std_btn"] {{ background-color: #238636; color: white; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); }}
+    .stProgress > div > div > div > div {{ background-color: #238636; }}
 """
 
-light_css = """
-    .stApp { background-color: #FAF5F0; }
-    .main-card {
+light_css = f"""
+    .stApp {{ background-color: #FAF5F0; }}
+    .main-card {{
         background: rgba(208, 225, 249, 0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
         padding: 30px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.4);
         text-align: center; margin-bottom: 25px; box-shadow: 0px 6px 20px rgba(0,0,0,0.08);
-    }
-    .stat-label { color: #4A5568; font-size: 0.9em; }
-    .stat-value { color: #1A202C; font-size: 1.8em; font-weight: bold; }
-    .reward-text { color: #2D3748; font-weight: bold; font-size: 1.2em; }
-    .progress-label { color: #2D3748; font-weight: bold; }
-    h3 { color: #2D3748 !important; }
-    .stTabs [data-baseweb="tab"] { color: #4A5568 !important; }
-    .stButton>button[key="std_btn"] { background-color: #8FD9BF; color: #1A202C; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
-    .stProgress > div > div > div > div { background-color: #8FD9BF; }
+    }}
+    .stat-label {{ color: #4A5568; font-size: 0.9em; }}
+    .stat-value {{ color: #1A202C; font-size: 1.8em; font-weight: bold; }}
+    .reward-text {{ color: #2D3748; font-weight: bold; font-size: 1.2em; }}
+    .progress-label {{ color: #2D3748; font-weight: bold; }}
+    h3 {{ color: #2D3748 !important; }}
+    .stTabs [data-baseweb="tab"] {{ color: #4A5568 !important; }}
+    .stButton>button[key="std_btn"] {{ background-color: #8FD9BF; color: #1A202C; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }}
+    .stProgress > div > div > div > div {{ background-color: #8FD9BF; }}
 """
 
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
 
-st.markdown(f"<style>{active_css} .stButton>button {{ border-radius: 6px; font-weight: bold; }}</style>", unsafe_allow_html=True)
+st.markdown(f"""
+    <style>
+    {active_css}
+    .stButton>button {{ border-radius: 6px; font-weight: bold; border: 1px solid transparent; }}
+    .stTabs [data-baseweb="tab-list"] {{ background-color: transparent; }}
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- CONNEXION ET CALCULS ---
+# --- 5. LOGIQUE DE CONNEXION ET CALCULS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 now = datetime.now()
@@ -121,7 +131,7 @@ fait = current_base + total_saisi
 delta = fait - theo
 jours_repos = delta / 7.2 if delta > 0 else 0
 
-# --- AFFICHAGE ---
+# --- 6. AFFICHAGE DES DONNÉES ---
 prog = min(fait / OBJECTIF_ANNUEL, 1.0)
 st.markdown(f'<p class="progress-label">Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h</p>', unsafe_allow_html=True)
 st.progress(prog)
@@ -146,6 +156,7 @@ c2.markdown(f'<p class="stat-label">DÛ (Saison)</p><p class="stat-value">{theo:
 
 st.divider()
 
+# --- 7. ONGLETS DE SAISIE ---
 tab_h, tab_c = st.tabs(["Saisie Heures", "Gestion Congés"])
 
 with tab_h:
