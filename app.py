@@ -26,37 +26,38 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- CALCUL DU DÛ DYNAMIQUE ---
 def get_theo(df_conges):
-    # On calcule jusqu'à hier soir pour ne pas être en retard sur la journée en cours
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total, curr = 0, datetime(2025, 9, 1)
     
-    # On transforme les congés saisis en dictionnaire {date: valeur}
     dict_conges = {}
     if not df_conges.empty:
         for _, row in df_conges.iterrows():
             try:
-                # Gestion du format de date européen
-                d_obj = pd.to_datetime(row['date'], dayfirst=True).date()
+                # On force la conversion de la date peu importe le format
+                d_val = row['date']
+                if isinstance(d_val, str):
+                    d_obj = pd.to_datetime(d_val, dayfirst=True).date()
+                else:
+                    d_obj = d_val.date() if hasattr(d_val, 'date') else pd.to_datetime(d_val).date()
                 dict_conges[d_obj] = float(row['type'])
-            except: continue
+            except Exception as e:
+                continue # Si une ligne bug, on passe à la suivante
 
     feries = [date(2025,11,11), date(2025,12,25), date(2026,1,1), date(2026,4,13), date(2026,5,1)]
 
     while curr < hier:
         d = curr.date()
-        if curr.weekday() < 5: # Lundi à Vendredi
-            # Lun-Mar = 7.5h | Mer-Jeu-Ven = 7h
+        if curr.weekday() < 5:
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0
-            
             if d in feries: 
-                pass # 0h dues
+                pass 
             elif d in dict_conges: 
-                total += h_jour * (1 - dict_conges[d]) # Ex: si 1.0 de congé, on ajoute 0h
+                # C'est ici que la magie opère : on soustrait le congé du dû
+                total += h_jour * (1 - dict_conges[d])
             else: 
                 total += h_jour
         curr += timedelta(days=1)
     return total
-
 # --- RÉCUPÉRATION DES DONNÉES ---
 # On lit les deux feuilles distinctes
 df_heures = conn.read(worksheet="Feuille 1", ttl=0)
