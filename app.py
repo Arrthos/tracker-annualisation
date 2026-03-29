@@ -123,7 +123,7 @@ df_heures = filter_by_season(df_heures_raw, date_debut_saison, date_fin_saison)
 df_conges = filter_by_season(df_conges_raw, date_debut_saison, date_fin_saison)
 
 current_base = 992.25 if start_year == 2025 else 0.0
-OBJECTIF_ANNUEL = 1607.0
+OBJECTIF_ANNUEL = 1652.0
 
 theo = get_theo(df_conges, date_debut_saison)
 total_saisi = df_heures['val'].sum() if not df_heures.empty else 0
