@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # --- 2. CONFIGURATION DE L'ICÔNE MOBILE (HEAD HTML) ---
-icon_url = "https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png?v=6"
+icon_url = "https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png?v=7"
 st.markdown(f"""<head><link rel="apple-touch-icon" href="{icon_url}"><link rel="icon" href="{icon_url}"></head>""", unsafe_allow_html=True)
 
 # --- 3. GESTION DU THÈME ---
@@ -58,7 +58,7 @@ light_css = """
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
 st.markdown(f"<style>{active_css} .stButton>button {{ border-radius: 6px; font-weight: bold; }}</style>", unsafe_allow_html=True)
 
-# --- 5. LOGIQUE DE CALCUL PRÉCISE ---
+# --- 5. LOGIQUE DE CALCUL (CONFORME BULLETIN 156H/MOIS) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 now = datetime.now()
@@ -78,25 +78,28 @@ def get_theo(df_conges, start_date):
 
     feries = [date(start_year,11,11), date(start_year,12,25), date(start_year+1,1,1), date(start_year+1,5,1)]
     
+    VALEUR_CONGE_JOUR = 7.2  # Tiré de ton bulletin (156h / 21.67j)
+    
     while curr < hier:
         d = curr.date()
-        if curr.weekday() < 5: # Semaine uniquement
-            is_lundi_mardi = curr.weekday() <= 1
-            h_jour = 7.5 if is_lundi_mardi else 7.0
+        if curr.weekday() < 5: 
+            # Ton planning habituel
+            h_jour_theo = 7.5 if curr.weekday() <= 1 else 7.0
             
             if d not in feries:
                 if d in dict_conges:
                     abs_type = dict_conges[d]
                     if abs_type == "Journée":
-                        total += 0
+                        # On ajuste le "Dû" pour qu'il soit réduit de 7.2h exactement
+                        total += (h_jour_theo - VALEUR_CONGE_JOUR)
                     elif abs_type == "Matin":
-                        # Matin est toujours 4h, donc on ne "doit" que l'après-midi
-                        total += (h_jour - 4.0)
+                        # Absence de 3.6h (7.2/2)
+                        total += (h_jour_theo - (VALEUR_CONGE_JOUR / 2))
                     elif abs_type == "Après-midi":
-                        # On ne "doit" que le matin (4h)
-                        total += 4.0
+                        # Absence de 3.6h (7.2/2)
+                        total += (h_jour_theo - (VALEUR_CONGE_JOUR / 2))
                 else:
-                    total += h_jour
+                    total += h_jour_theo
         curr += timedelta(days=1)
     return total
 
@@ -111,6 +114,7 @@ def filter_by_season(df, start_date):
 df_heures = filter_by_season(df_heures_raw, date_debut_saison)
 df_conges = filter_by_season(df_conges_raw, date_debut_saison)
 
+# Base 2025 ajustée selon tes besoins
 current_base = 992.25 if start_year == 2025 else 0.0
 OBJECTIF_ANNUEL = 1607.0
 
@@ -124,7 +128,7 @@ jours_repos = delta / 7.2 if delta > 0 else 0
 st.markdown(f'<p style="font-weight:bold;">Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h</p>', unsafe_allow_html=True)
 st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
-st.markdown("### Annualisation")
+st.markdown("### Annualisation (Base 36h/semaine)")
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta, m_delta = int(abs(delta)), int((abs(delta) - int(abs(delta))) * 60)
 
@@ -132,13 +136,13 @@ st.markdown(f"""
     <div class="main-card">
         <p class="stat-label">Situation Actuelle</p>
         <h1 style="color: {color}; font-size: 4em; margin: 10px 0;">{'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}</h1>
-        {f'<p class="reward-text">Équivalent à {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
+        {f'<p class="reward-text">Équivalent à {jours_repos:.1f} jours de repos (base 7.2h)</p>' if delta > 0 else ''}
     </div>
     """, unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
 c1.markdown(f'<p class="stat-label">FAIT (Saison)</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
-c2.markdown(f'<p class="stat-label">DÛ (Saison)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
+c2.markdown(f'<p class="stat-label">DÛ THÉORIQUE</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -164,7 +168,7 @@ with tab_h:
 with tab_c:
     st.subheader("Déclarer une absence")
     date_abs = st.date_input("Date", value=datetime.now())
-    type_abs = st.radio("Type d'absence", ["Journée", "Matin", "Après-midi"], horizontal=True)
+    type_abs = st.radio("Type", ["Journée", "Matin", "Après-midi"], horizontal=True)
     
     if st.button("Enregistrer l'absence", use_container_width=True):
         new_c = pd.DataFrame([{"date": date_abs.strftime("%d/%m/%Y"), "type": type_abs}])
