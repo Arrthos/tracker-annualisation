@@ -21,14 +21,13 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# --- 3. STYLE CSS (GLASSY) ---
+# --- 3. STYLE CSS ---
 dark_css = """
     .stApp { background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%); background-attachment: fixed; }
     .main-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); padding: 30px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; margin-bottom: 25px; }
     .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #3fb950; font-weight: bold; font-size: 1.2em; }
-    h3 { color: white !important; }
 """
 light_css = """
     .stApp { background-color: #FAF5F0; }
@@ -36,7 +35,6 @@ light_css = """
     .stat-label { color: #4A5568; font-size: 0.9em; }
     .stat-value { color: #1A202C; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #2D3748; font-weight: bold; font-size: 1.2em; }
-    h3 { color: #2D3748 !important; }
 """
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
 st.markdown(f"<style>{active_css} .stButton>button {{ border-radius: 6px; font-weight: bold; }}</style>", unsafe_allow_html=True)
@@ -71,7 +69,6 @@ def get_theo(df_conges, start_date, solidarite_date):
         d = curr.date()
         if curr.weekday() < 5:
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0
-            # Si c'est férié ET que ce n'est pas la solidarité choisie, on ne doit rien
             if d in fr_holidays and d != solidarite_date:
                 pass
             else:
@@ -85,13 +82,14 @@ df_heures_raw = conn.read(worksheet="Feuille 1", ttl=0)
 df_conges_raw = conn.read(worksheet="Conges", ttl=0)
 
 def filter_by_season(df, start_date, end_date):
-    if df.empty: return df
+    if df.empty: return df.copy()
+    df = df.copy()
     df['date_dt'] = pd.to_datetime(df['date'], dayfirst=True)
     mask = (df['date_dt'] >= start_date) & (df['date_dt'] <= end_date)
     return df.loc[mask].drop(columns=['date_dt'])
 
-df_heures = filter_by_season(df_heures_raw.copy(), date_debut_saison, date_fin_saison)
-df_conges = filter_by_season(df_conges_raw.copy(), date_debut_saison, date_fin_saison)
+df_heures = filter_by_season(df_heures_raw, date_debut_saison, date_fin_saison)
+df_conges = filter_by_season(df_conges_raw, date_debut_saison, date_fin_saison)
 
 OBJECTIF_ANNUEL = 1652.0
 current_base = 992.25 if start_year == 2025 else 0.0
@@ -103,31 +101,24 @@ delta = fait - theo
 jours_repos = delta / 7.2 if delta > 0 else 0
 
 # --- 6. AFFICHAGE ---
-prog = min(fait / OBJECTIF_ANNUEL, 1.0)
 st.markdown(f"### Progression : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h")
-st.progress(prog)
+st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta, m_delta = int(abs(delta)), int((abs(delta) - int(abs(delta))) * 60)
 
 st.markdown(f"""
     <div class="main-card">
-        <p class="stat-label">Balance Actuelle</p>
+        <p class="stat-label">Balance Annualisation</p>
         <h1 style="color: {color}; font-size: 3.5em; margin: 10px 0;">
-            {' + ' if delta >= 0 else ' - '}{h_delta}h {m_delta:02d}
+            {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
         </h1>
         {f'<p class="reward-text">≃ {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
     </div>
     """, unsafe_allow_html=True)
 
-c1, c2 = st.columns(2)
-c1.markdown(f'<p class="stat-label">FAIT</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
-c2.markdown(f'<p class="stat-label">DÛ</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
-
-st.divider()
-
-# --- 7. ONGLETS DE SAISIE (COMPLETS) ---
-tab_h, tab_c = st.tabs(["Saisie Heures", "Gestion Congés"])
+# --- 7. ONGLETS ---
+tab_h, tab_c = st.tabs(["🕒 Saisie Heures", "🌴 Gestion Congés"])
 
 with tab_h:
     today_wd = datetime.now().weekday()
@@ -151,20 +142,33 @@ with tab_h:
     if not df_heures.empty:
         st.write("**Dernières saisies :**")
         for i, row in df_heures.iloc[::-1].head(5).iterrows():
-            col_t, col_b = st.columns([4, 1])
-            col_t.write(f"{row['date']} | {row['val']:.2f}h")
-            if col_b.button("🗑️", key=f"del_h_{i}"):
-                # Suppression par index dans le DataFrame d'origine
-                df_heures_raw = df_heures_raw.drop(df_heures_raw[df_heures_raw['date'] == row['date']].index)
+            c_t, c_b = st.columns([4, 1])
+            c_t.write(f"{row['date']} | {row['val']:.2f}h")
+            if c_b.button("🗑️", key=f"del_h_{i}"):
+                df_heures_raw = df_heures_raw.drop(i)
                 conn.update(worksheet="Feuille 1", data=df_heures_raw)
                 st.rerun()
 
 with tab_c:
-    st.subheader("Déclarer un congé")
+    st.subheader("Déclarer une absence")
     date_abs = st.date_input("Date du congé", value=datetime.now())
     type_abs = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
-    if st.button("Enregistrer l'absence", use_container_width=True):
+    
+    if st.button("Enregistrer le congé", use_container_width=True):
         new_c = pd.DataFrame([{"date": date_abs.strftime("%d/%m/%Y"), "type": 1.0 if type_abs == "Journée" else 0.5}])
         updated_c = pd.concat([df_conges_raw, new_c], ignore_index=True)
         conn.update(worksheet="Conges", data=updated_c)
         st.rerun()
+
+    st.divider()
+    if not df_conges.empty:
+        st.write("**Congés enregistrés (Saison) :**")
+        for i, row in df_conges.iloc[::-1].iterrows():
+            c_t, c_b = st.columns([4, 1])
+            txt = "Journée" if row['type'] == 1.0 else "Demi-journée"
+            c_t.write(f"📅 {row['date']} ({txt})")
+            if c_b.button("🗑️", key=f"del_c_{i}"):
+                # On supprime la ligne correspondante dans le fichier global
+                df_conges_raw = df_conges_raw.drop(i)
+                conn.update(worksheet="Conges", data=df_conges_raw)
+                st.rerun()
