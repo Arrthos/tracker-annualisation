@@ -21,7 +21,6 @@ def toggle_theme():
 # CSS COMMUN (Suppression des icônes de chaînes/ancres)
 common_css = """
     <style>
-    /* Cache l'icône de lien (la petite chaîne) à côté des titres */
     .element-container h1 a, .element-container h2 a, .element-container h3 a {
         display: none !important;
     }
@@ -131,7 +130,7 @@ st.markdown(f"""
     <div class="main-card">
         <p class="stat-label">Balance Annualisation</p>
         <h1 style="color: {color} !important; font-size: 3.5em; margin: 10px 0;">
-            {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
+            {'+' if delta >= 0 else '-'}{h_delta}h{m_delta:02d}
         </h1>
         {f'<p class="reward-text">≃ {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
     </div>
