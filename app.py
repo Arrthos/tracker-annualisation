@@ -2,7 +2,6 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
-import plotly.express as px
 
 # --- CONFIGURATION ET STYLE CSS ---
 st.set_page_config(page_title="Work Tracker", layout="centered")
@@ -91,23 +90,6 @@ with col1:
     st.markdown(f'<p class="stat-label">FAIT (Total)</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
 with col2:
     st.markdown(f'<p class="stat-label">DÛ (Théorique)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
-
-# --- GRAPHIQUE D'ÉVOLUTION ---
-if not df_heures.empty:
-    st.write("---")
-    st.subheader("📈 Activité des 30 derniers jours")
-    # Préparation des données pour le graphique
-    df_plot = df_heures.copy()
-    df_plot['date'] = pd.to_datetime(df_plot['date'], dayfirst=True)
-    df_plot = df_plot.sort_values('date').tail(30)
-    
-    fig = px.bar(df_plot, x='date', y='val', 
-                 title="Heures travaillées par jour",
-                 labels={'val': 'Heures', 'date': 'Date'},
-                 color_discrete_sequence=['#238636'])
-    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                      font_color="white", height=300, margin=dict(l=20, r=20, t=40, b=20))
-    st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
