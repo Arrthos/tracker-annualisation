@@ -18,6 +18,18 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
+# CSS COMMUN (Suppression des icônes de chaînes/ancres)
+common_css = """
+    <style>
+    /* Cache l'icône de lien (la petite chaîne) à côté des titres */
+    .element-container h1 a, .element-container h2 a, .element-container h3 a {
+        display: none !important;
+    }
+    .stButton>button { border-radius: 8px; font-weight: bold; }
+    .stProgress > div > div > div > div { background-color: #238636; }
+    </style>
+"""
+
 dark_css = """
     .stApp { background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%); background-attachment: fixed; }
     .main-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); padding: 30px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; margin-bottom: 25px; }
@@ -42,14 +54,8 @@ light_css = """
 """
 
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
-
-st.markdown(f"""
-    <style>
-    {active_css}
-    .stButton>button {{ border-radius: 8px; font-weight: bold; }}
-    .stProgress > div > div > div > div {{ background-color: #238636; }}
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown(common_css, unsafe_allow_html=True)
+st.markdown(f"<style>{active_css}</style>", unsafe_allow_html=True)
 
 # --- 3. LOGIQUE DE CONNEXION ET SAISON ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -81,9 +87,8 @@ def get_theo(df_conges, start_date, solidarite_date):
 
     while curr < hier:
         d = curr.date()
-        if curr.weekday() < 5: # Lundi-Vendredi
-            h_jour = 7.5 if curr.weekday() <= 1 else 7.0 # 36h/semaine
-            # Un jour est dû s'il n'est PAS férié OU si c'est la solidarité
+        if curr.weekday() < 5: 
+            h_jour = 7.5 if curr.weekday() <= 1 else 7.0 
             if d in fr_holidays and d != solidarite_date:
                 pass 
             else:
@@ -92,7 +97,7 @@ def get_theo(df_conges, start_date, solidarite_date):
         curr += timedelta(days=1)
     return total
 
-# --- 5. CHARGEMENT ET FILTRAGE DES DONNÉES ---
+# --- 5. CHARGEMENT ET FILTRAGE ---
 df_heures_raw = conn.read(worksheet="Feuille 1", ttl=0)
 df_conges_raw = conn.read(worksheet="Conges", ttl=0)
 
@@ -106,7 +111,6 @@ def filter_by_season(df, start_date, end_date):
 df_heures = filter_by_season(df_heures_raw, date_debut_saison, date_fin_saison)
 df_conges = filter_by_season(df_conges_raw, date_debut_saison, date_fin_saison)
 
-# Paramètres
 OBJECTIF_ANNUEL = 1652.0
 current_base = 992.25 if start_year == 2025 else 0.0
 
@@ -116,7 +120,7 @@ fait = current_base + total_saisi
 delta = fait - theo
 jours_repos = delta / 7.2 if delta > 0 else 0
 
-# --- 6. AFFICHAGE DES RÉSULTATS ---
+# --- 6. AFFICHAGE ---
 st.markdown(f"### Progression : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h")
 st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
@@ -139,7 +143,7 @@ col_b.markdown(f'<p class="stat-label">HEURES DUES</p><p class="stat-value">{the
 
 st.divider()
 
-# --- 7. ONGLETS D'ACTION ---
+# --- 7. ONGLETS ---
 tab1, tab2 = st.tabs(["🕒 Saisie Heures", "🌴 Gestion Congés"])
 
 with tab1:
