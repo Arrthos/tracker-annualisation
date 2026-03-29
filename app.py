@@ -6,40 +6,35 @@ from datetime import datetime, date, timedelta
 # --- CONFIGURATION INITIALE ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-# --- GESTION DU THEME (BOUTON SWITCH AVEC OMBRE DISCRETE) ---
+# --- CONFIGURATION DE L'ICÔNE MOBILE (HEAD HTML) ---
+# Utilisation du lien "Raw" de ton GitHub pour l'image_11.png
+icon_url = "https://raw.githubusercontent.com/Arrthos/tracker-annualisation/main/image_11.png"
+
+st.markdown(f"""
+    <head>
+        <link rel="apple-touch-icon" href="{icon_url}">
+        <link rel="icon" href="{icon_url}">
+    </head>
+    """, unsafe_allow_html=True)
+
+# --- GESTION DU THEME ---
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# Bouton avec ombre légère dans la barre latérale
 with st.sidebar:
     st.button("Switch Mode (Clair/Sombre)", on_click=toggle_theme, use_container_width=True)
-    st.markdown("""
-        <style>
-        .stButton>button { box-shadow: 0px 2px 5px rgba(0,0,0,0.1); }
-        </style>
-        """, unsafe_allow_html=True)
-    
-# --- CSS DYNAMIQUE ET GLASSY (AVEC OMBRES ET SANS EMOJIS) ---
+    st.markdown("<style>.stButton>button { box-shadow: 0px 2px 5px rgba(0,0,0,0.1); }</style>", unsafe_allow_html=True)
 
-# Prop A : PURE GLASS (Dark) + OMBRES
+# --- CSS DYNAMIQUE ET GLASSY ---
 dark_css = """
-    .stApp {
-        background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%);
-        background-attachment: fixed;
-    }
+    .stApp { background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%); background-attachment: fixed; }
     .main-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        padding: 30px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        text-align: center;
-        margin-bottom: 25px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); /* Ombre principale */
+        background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        padding: 30px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center; margin-bottom: 25px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     }
     .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
@@ -47,66 +42,32 @@ dark_css = """
     .progress-label { color: white; font-weight: bold; }
     h3 { color: white !important; }
     .stTabs [data-baseweb="tab"] { color: #8b949e; }
-    
-    .stButton>button[key="std_btn"] {
-        background-color: #238636;
-        color: white;
-        border: 1px solid rgba(255,255,255,0.1);
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3); /* Ombre bouton */
-    }
-    .stProgress > div > div > div > div {
-        background-color: #238636;
-        box-shadow: inset 0px -2px 5px rgba(0,0,0,0.2); /* Ombre intérieure barre */
-    }
+    .stButton>button[key="std_btn"] { background-color: #238636; color: white; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); }
+    .stProgress > div > div > div > div { background-color: #238636; }
 """
 
-# Prop B : LIGHT FROSTY (Light) + OMBRES + COULEURS CORRIGÉES
 light_css = """
-    .stApp {
-        background-color: #FAF5F0;
-    }
+    .stApp { background-color: #FAF5F0; }
     .main-card {
-        background: rgba(208, 225, 249, 0.8);
-        backdrop-filter: blur(15px);
-        -webkit-backdrop-filter: blur(15px);
-        padding: 30px;
-        border-radius: 30px;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        text-align: center;
-        margin-bottom: 25px;
-        box-shadow: 0px 6px 20px rgba(0,0,0,0.08); /* Ombre principale plus forte */
+        background: rgba(208, 225, 249, 0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+        padding: 30px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.4);
+        text-align: center; margin-bottom: 25px; box-shadow: 0px 6px 20px rgba(0,0,0,0.08);
     }
     .stat-label { color: #4A5568; font-size: 0.9em; }
     .stat-value { color: #1A202C; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #2D3748; font-weight: bold; font-size: 1.2em; }
     .progress-label { color: #2D3748; font-weight: bold; }
     h3 { color: #2D3748 !important; }
-    
     .stTabs [data-baseweb="tab"] { color: #4A5568 !important; }
-    .stTabs [data-baseweb="tab-list"] { border-bottom: 2px solid #D0E1F9; }
-    
-    .stButton>button[key="std_btn"] {
-        background-color: #8FD9BF;
-        color: #1A202C;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1); /* Ombre bouton */
-    }
-    .stProgress > div > div > div > div {
-        background-color: #8FD9BF;
-        box-shadow: inset 0px -1px 3px rgba(0,0,0,0.1); /* Ombre intérieure barre */
-    }
+    .stButton>button[key="std_btn"] { background-color: #8FD9BF; color: #1A202C; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
+    .stProgress > div > div > div > div { background-color: #8FD9BF; }
 """
 
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
 
-st.markdown(f"""
-    <style>
-    {active_css}
-    .stButton>button {{ border-radius: 6px; font-weight: bold; border: 1px solid transparent; }}
-    .stTabs [data-baseweb="tab-list"] {{ background-color: transparent; }}
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown(f"<style>{active_css} .stButton>button {{ border-radius: 6px; font-weight: bold; }}</style>", unsafe_allow_html=True)
 
-# --- CONNEXION ET LOGIQUE ---
+# --- CONNEXION ET CALCULS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 now = datetime.now()
@@ -117,7 +78,6 @@ date_fin_saison = datetime(start_year + 1, 8, 31)
 with st.sidebar:
     st.info(f"Saison active : {start_year}-{start_year+1}")
 
-# --- CALCULS ---
 def get_theo(df_conges, start_date):
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total, curr = 0, start_date
@@ -162,9 +122,9 @@ delta = fait - theo
 jours_repos = delta / 7.2 if delta > 0 else 0
 
 # --- AFFICHAGE ---
-progression = min(fait / OBJECTIF_ANNUEL, 1.0)
+prog = min(fait / OBJECTIF_ANNUEL, 1.0)
 st.markdown(f'<p class="progress-label">Progression Annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h</p>', unsafe_allow_html=True)
-st.progress(progression)
+st.progress(prog)
 
 st.markdown("### Annualisation")
 color = "#238636" if delta >= 0 else "#da3633"
@@ -191,7 +151,6 @@ tab_h, tab_c = st.tabs(["Saisie Heures", "Gestion Congés"])
 with tab_h:
     today_wd = datetime.now().weekday()
     std_h, std_m = (7, 30) if today_wd <= 1 else (7, 0)
-    
     if st.button(f"Valider journée standard ({std_h}h{std_m:02d})", use_container_width=True, key="std_btn"):
         new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": std_h + std_m/60}])
         updated = pd.concat([df_heures_raw, new_row], ignore_index=True)
