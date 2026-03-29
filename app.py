@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
+import plotly.express as px
 
 # --- CONFIGURATION ET STYLE CSS ---
 st.set_page_config(page_title="Work Tracker", layout="centered")
@@ -27,7 +28,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- CALCUL DU DÛ DYNAMIQUE ---
 def get_theo(df_conges):
-    # On calcule jusqu'à hier soir.
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total, curr = 0, datetime(2025, 9, 1)
     
@@ -47,7 +47,7 @@ def get_theo(df_conges):
 
     while curr < hier:
         d = curr.date()
-        if curr.weekday() < 5: # Lundi-Vendredi
+        if curr.weekday() < 5:
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0
             if d in feries: pass
             elif d in dict_conges: total += h_jour * (1 - dict_conges[d])
@@ -65,10 +65,13 @@ total_saisi = df_heures['val'].sum() if not df_heures.empty else 0
 fait = BASE_FAIT + total_saisi
 delta = fait - theo
 
+# Calcul des jours de repos (moyenne 7.2h)
+jours_repos = delta / 7.2 if delta > 0 else 0
+
 # --- INTERFACE PRINCIPALE ---
 st.markdown("### ⏱️ Annualisation")
 
-# Affichage du Delta (Avance/Retard)
+# Affichage du Delta
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta = int(abs(delta))
 m_delta = int((abs(delta) - h_delta) * 60)
@@ -79,6 +82,7 @@ st.markdown(f"""
         <h1 style="color: {color}; font-size: 4em; margin: 10px 0;">
             {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
         </h1>
+        {f'<p style="color: #3fb950; font-weight: bold; font-size: 1.2em;">✨ Équivalent à {jours_repos:.1f} jours de repos</p>' if delta > 0 else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -88,23 +92,38 @@ with col1:
 with col2:
     st.markdown(f'<p class="stat-label">DÛ (Théorique)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
 
+# --- GRAPHIQUE D'ÉVOLUTION ---
+if not df_heures.empty:
+    st.write("---")
+    st.subheader("📈 Activité des 30 derniers jours")
+    # Préparation des données pour le graphique
+    df_plot = df_heures.copy()
+    df_plot['date'] = pd.to_datetime(df_plot['date'], dayfirst=True)
+    df_plot = df_plot.sort_values('date').tail(30)
+    
+    fig = px.bar(df_plot, x='date', y='val', 
+                 title="Heures travaillées par jour",
+                 labels={'val': 'Heures', 'date': 'Date'},
+                 color_discrete_sequence=['#238636'])
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                      font_color="white", height=300, margin=dict(l=20, r=20, t=40, b=20))
+    st.plotly_chart(fig, use_container_width=True)
+
 st.divider()
 
 # --- ONGLETS ---
 tab_h, tab_c = st.tabs(["🕒 Saisie Heures", "🌴 Gestion Congés"])
 
 with tab_h:
-    # Déterminer la journée type selon le jour actuel
     today_wd = datetime.now().weekday()
     std_h = 7
-    std_m = 30 if today_wd <= 1 else 0 # 7h30 Lun/Mar, sinon 7h
+    std_m = 30 if today_wd <= 1 else 0
     
     st.subheader("Saisie rapide")
     if st.button(f"🚀 Valider ma journée standard ({std_h}h{std_m:02d})", use_container_width=True, type="primary"):
         new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": std_h + std_m/60}])
-        updated = pd.concat([df_heures, new_row], ignore_index=True) if not df_heures.empty else new_row
+        updated = pd.concat([df_heures, new_row], ignore_index=True)
         conn.update(worksheet="Feuille 1", data=updated)
-        st.success("Journée enregistrée !")
         st.rerun()
 
     st.write("---")
@@ -114,15 +133,13 @@ with tab_h:
         m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1, value=std_m)
         if st.button("Enregistrer la durée précise", use_container_width=True):
             new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": h_in + m_in/60}])
-            updated = pd.concat([df_heures, new_row], ignore_index=True) if not df_heures.empty else new_row
+            updated = pd.concat([df_heures, new_row], ignore_index=True)
             conn.update(worksheet="Feuille 1", data=updated)
             st.rerun()
 
     st.write("**Dernières saisies :**")
     if not df_heures.empty:
-        # On affiche les 5 dernières lignes avec bouton supprimer
-        last_5 = df_heures.iloc[::-1].head(5)
-        for i, row in last_5.iterrows():
+        for i, row in df_heures.iloc[::-1].head(5).iterrows():
             c_txt, c_del = st.columns([4, 1])
             c_txt.write(f"📅 {row['date']} : {row['val']:.2f}h")
             if c_del.button("🗑️", key=f"del_h_{i}"):
@@ -138,9 +155,8 @@ with tab_c:
     
     if st.button("Enregistrer l'absence", use_container_width=True):
         new_c = pd.DataFrame([{"date": date_abs.strftime("%d/%m/%Y"), "type": val_abs}])
-        updated_c = pd.concat([df_conges, new_c], ignore_index=True) if not df_conges.empty else new_c
+        updated_c = pd.concat([df_conges, new_c], ignore_index=True)
         conn.update(worksheet="Conges", data=updated_c)
-        st.success("Congé ajouté !")
         st.rerun()
 
     st.write("---")
