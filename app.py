@@ -3,132 +3,81 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
 
-# --- CONFIGURATION ET STYLE CSS ---
+# --- CONFIGURATION ---
 st.set_page_config(page_title="Work Tracker", layout="centered")
 
-st.markdown("""
-    <style>
-    /* Fond principal */
-    .stApp { background-color: #0d1117; }
-    
-    /* Carte Situation Actuelle */
-    .main-card {
-        background-color: #161b22;
-        padding: 30px;
-        border-radius: 15px;
-        border: 1px solid #30363d;
-        text-align: center;
-        margin-bottom: 25px;
-    }
-    
-    /* Libellés FAIT / DÛ */
-    .stat-label { color: #8b949e; font-size: 0.9em; margin-bottom: 5px; }
-    .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
-    
-    /* Bouton Valider */
-    .stButton>button {
-        background-color: #238636;
-        color: white;
-        border-radius: 8px;
-        width: 100%;
-        border: none;
-        height: 45px;
-        font-weight: bold;
-    }
-    .stButton>button:hover { background-color: #2ea043; border: none; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- CONNEXION ET CALCULS ---
-# Remplacer l'ancienne ligne de connexion par celle-ci :
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def get_theo():
+# --- FONCTION DE CALCUL DU DÛ (Recalcule tout) ---
+def get_theo(df_conges):
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total, curr = 0, datetime(2025, 9, 1)
-    conges = {date(2025,10,14): 0.5, date(2025,10,20): 1.0, date(2026,2,18): 0.5}
-    for i in range(12):
-        d = date(2026,1,19) + timedelta(days=i)
-        if d.weekday() < 5: conges[d] = 1.0
+    
+    # Transformation des congés du GSheet en dictionnaire pour le calcul
+    dict_conges = {}
+    if not df_conges.empty:
+        for _, row in df_conges.iterrows():
+            try:
+                d_obj = pd.to_datetime(row['date'], dayfirst=True).date()
+                dict_conges[d_obj] = float(row['type'])
+            except: continue
+
     feries = [date(2025,11,11), date(2025,12,25), date(2026,1,1)]
+
     while curr < hier:
         d = curr.date()
-        if curr.weekday() < 5:
+        if curr.weekday() < 5: # Lundi-Vendredi
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0
             if d in feries: pass
-            elif d in conges: total += h_jour * (1 - conges[d])
+            elif d in dict_conges: total += h_jour * (1 - dict_conges[d])
             else: total += h_jour
         curr += timedelta(days=1)
     return total
 
-# --- RÉCUPÉRATION DONNÉES ---
-df = conn.read(ttl=0)
+# --- RÉCUPÉRATION DES DONNÉES ---
+df_heures = conn.read(worksheet="Feuille 1", ttl=0) # Ta feuille d'heures
+df_conges = conn.read(worksheet="Conges", ttl=0)   # Ta nouvelle feuille
+
 BASE_FAIT = 992.25
-theo = get_theo()
-total_saisi = df['val'].sum() if not df.empty else 0
-fait = BASE_FAIT + total_saisi
+theo = get_theo(df_conges)
+fait = BASE_FAIT + (df_heures['val'].sum() if not df_heures.empty else 0)
 delta = fait - theo
 
 # --- INTERFACE ---
-st.markdown("### ⏱️ Annualisation")
+st.title("⏱️ Annualisation")
 
-# Bloc Situation Actuelle
+# Affichage du Delta
 color = "#238636" if delta >= 0 else "#da3633"
 h_delta = int(abs(delta))
 m_delta = int((abs(delta) - h_delta) * 60)
+st.markdown(f"<div style='text-align:center; background:#161b22; padding:20px; border-radius:15px; border:1px solid #30363d;'><h1 style='color:{color}; font-size:4em;'>{'+' if delta>=0 else '-'}{h_delta}h {m_delta:02d}</h1></div>", unsafe_allow_html=True)
 
-st.markdown(f"""
-    <div class="main-card">
-        <p style="color: #8b949e; font-size: 0.9em;">Situation Actuelle</p>
-        <h1 style="color: {color}; font-size: 4em; margin: 10px 0;">
-            {'+' if delta >= 0 else '-'}{h_delta}h {m_delta:02d}
-        </h1>
-    </div>
-    """, unsafe_allow_html=True)
+# ONGLETS POUR SÉPARER SAISIE HEURES / CONGÉS
+tab1, tab2 = st.tabs(["🕒 Heures", "🌴 Congés"])
 
-# Ligne FAIT / DÛ
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown(f'<p class="stat-label">FAIT</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
-with col2:
-    st.markdown(f'<p class="stat-label">DÛ</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
+with tab1:
+    st.subheader("Ajouter des heures")
+    c1, c2 = st.columns(2)
+    h_in = c1.number_input("Heures", min_value=0, step=1)
+    m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1)
+    if st.button("Valider les heures"):
+        new_row = pd.DataFrame([{"date": datetime.now().strftime("%d/%m/%Y"), "val": h_in + m_in/60}])
+        updated = pd.concat([df_heures, new_row], ignore_index=True)
+        conn.update(worksheet="Feuille 1", data=updated)
+        st.rerun()
 
-st.divider()
-
-# Section Saisie
-st.markdown("#### Ajouter des heures")
-c1, c2 = st.columns(2)
-h_in = c1.number_input("Heures", min_value=0, step=1, key="h")
-m_in = c2.number_input("Minutes", min_value=0, max_value=59, step=1, key="m")
-
-if st.button("Valider la saisie"):
-    # 1. Préparation de la nouvelle ligne
-    new_row = pd.DataFrame([{
-        "date": datetime.now().strftime("%d/%m/%Y"), 
-        "val": h_in + m_in/60
-    }])
+with tab2:
+    st.subheader("Déclarer un congé")
+    date_c = st.date_input("Date du congé")
+    type_c = st.selectbox("Type", ["Journée entière", "Demi-journée"], index=0)
+    val_c = 1.0 if type_c == "Journée entière" else 0.5
     
-    # 2. Fusion avec les anciennes données
-    if df.empty:
-        updated_df = new_row
-    else:
-        updated_df = pd.concat([df, new_row], ignore_index=True)
+    if st.button("Enregistrer le congé"):
+        new_c = pd.DataFrame([{"date": date_c.strftime("%d/%m/%Y"), "type": val_c}])
+        updated_c = pd.concat([df_conges, new_c], ignore_index=True)
+        conn.update(worksheet="Conges", data=updated_c)
+        st.rerun()
     
-    # 3. C'est CETTE LIGNE qui fait la mise à jour vers Google Sheets
-    conn.update(data=updated_df) 
-    
-    st.success("Enregistré dans Google Sheets !")
-    st.rerun()
-# Section Historique
-st.markdown("#### Historique des saisies")
-if not df.empty:
-    for i, row in df.iloc[::-1].iterrows(): # Affichage du plus récent au plus ancien
-        with st.container():
-            col_t, col_b = st.columns([4, 1])
-            col_t.markdown(f"📅 {row['date']} : **{row['val']:.2f}h**")
-            if col_b.button("🗑️", key=f"del_{i}"):
-                df = df.drop(i)
-                conn.update(data=df)
-                st.rerun()
-else:
-    st.info("Aucune saisie pour le moment.")
+    st.write("---")
+    st.write("Historique congés :")
+    st.dataframe(df_conges, use_container_width=True)
