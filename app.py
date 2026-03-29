@@ -27,7 +27,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- CALCUL DU DÛ DYNAMIQUE ---
 def get_theo(df_conges):
-    # On calcule jusqu'à hier soir
+    # On calcule jusqu'à hier soir.
     hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total, curr = 0, datetime(2025, 9, 1)
     
