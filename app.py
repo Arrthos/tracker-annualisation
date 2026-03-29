@@ -6,90 +6,94 @@ from datetime import datetime, date, timedelta
 # --- CONFIGURATION INITIALE ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-# --- GESTION DU THEME (BOUTON SWITCH) ---
+# --- GESTION DU THEME (BOUTON SWITCH AVEC OMBRE DISCRETE) ---
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# Bouton discret dans la barre latérale
+# Bouton avec ombre légère dans la barre latérale
 with st.sidebar:
     st.button("Switch Mode (Clair/Sombre)", on_click=toggle_theme, use_container_width=True)
+    st.markdown("""
+        <style>
+        .stButton>button { box-shadow: 0px 2px 5px rgba(0,0,0,0.1); }
+        </style>
+        """, unsafe_allow_html=True)
     
-# --- CSS DYNAMIQUE ET GLASSY (SANS EMOJIS) ---
+# --- CSS DYNAMIQUE ET GLASSY (AVEC OMBRES ET SANS EMOJIS) ---
 
-# Prop A : PURE GLASS (Dark)
+# Prop A : PURE GLASS (Dark) + OMBRES
 dark_css = """
-    /* Fond dégradé sombre flouté */
     .stApp {
         background: radial-gradient(circle at center, #1a2a40 0%, #0d1117 100%);
         background-attachment: fixed;
     }
-    
-    /* Cartes Glassy (Givré) */
     .main-card {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         padding: 30px;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.1); /* Bordure ultra-fine */
+        border: 1px solid rgba(255, 255, 255, 0.1);
         text-align: center;
         margin-bottom: 25px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); /* Ombre principale */
     }
-    
-    .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; margin-bottom: 5px; }
+    .stat-label { color: rgba(255, 255, 255, 0.6); font-size: 0.9em; }
     .stat-value { color: white; font-size: 1.8em; font-weight: bold; }
     .reward-text { color: #3fb950; font-weight: bold; font-size: 1.2em; }
     .progress-label { color: white; font-weight: bold; }
+    h3 { color: white !important; }
+    .stTabs [data-baseweb="tab"] { color: #8b949e; }
     
-    /* Bouton Standard Vert */
     .stButton>button[key="std_btn"] {
         background-color: #238636;
         color: white;
         border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3); /* Ombre bouton */
     }
-    
-    /* Barre de progression verte */
-    .stProgress > div > div > div > div { background-color: #238636; }
+    .stProgress > div > div > div > div {
+        background-color: #238636;
+        box-shadow: inset 0px -2px 5px rgba(0,0,0,0.2); /* Ombre intérieure barre */
+    }
 """
 
-# Prop B : LIGHT FROSTY (Light)
+# Prop B : LIGHT FROSTY (Light) + OMBRES + COULEURS CORRIGÉES
 light_css = """
-    /* Fond très clair et doux */
     .stApp {
         background-color: #FAF5F0;
     }
-    
-    /* Cartes Glassy Douces (Givré) */
     .main-card {
-        background: rgba(208, 225, 249, 0.6); /* Pastel Bleu transparent */
+        background: rgba(208, 225, 249, 0.8);
         backdrop-filter: blur(15px);
         -webkit-backdrop-filter: blur(15px);
         padding: 30px;
-        border-radius: 30px; /* Coins très arrondis */
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
         text-align: center;
         margin-bottom: 25px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
+        box-shadow: 0px 6px 20px rgba(0,0,0,0.08); /* Ombre principale plus forte */
     }
+    .stat-label { color: #4A5568; font-size: 0.9em; }
+    .stat-value { color: #1A202C; font-size: 1.8em; font-weight: bold; }
+    .reward-text { color: #2D3748; font-weight: bold; font-size: 1.2em; }
+    .progress-label { color: #2D3748; font-weight: bold; }
+    h3 { color: #2D3748 !important; }
     
-    .stat-label { color: #5c6c7c; font-size: 0.9em; margin-bottom: 5px; }
-    .stat-value { color: #2e3b47; font-size: 1.8em; font-weight: bold; }
-    .reward-text { color: #238636; font-weight: bold; font-size: 1.2em; }
-    .progress-label { color: #2e3b47; font-weight: bold; }
+    .stTabs [data-baseweb="tab"] { color: #4A5568 !important; }
+    .stTabs [data-baseweb="tab-list"] { border-bottom: 2px solid #D0E1F9; }
     
-    /* Bouton Standard Menthe */
     .stButton>button[key="std_btn"] {
-        background-color: #A8E6CF;
-        color: #2e3b47;
-        border: 1px solid rgba(0,0,0,0.05);
+        background-color: #8FD9BF;
+        color: #1A202C;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.1); /* Ombre bouton */
     }
-    
-    /* Barre de progression menthe */
-    .stProgress > div > div > div > div { background-color: #A8E6CF; }
+    .stProgress > div > div > div > div {
+        background-color: #8FD9BF;
+        box-shadow: inset 0px -1px 3px rgba(0,0,0,0.1); /* Ombre intérieure barre */
+    }
 """
 
 active_css = dark_css if st.session_state.theme == 'dark' else light_css
