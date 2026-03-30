@@ -100,7 +100,7 @@ def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
 # --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
@@ -110,7 +110,7 @@ if not st.session_state.authenticated:
         st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
-        if st.form_submit_button("ENTRER"):
+        if st.form_submit_button("Connexion"):
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
