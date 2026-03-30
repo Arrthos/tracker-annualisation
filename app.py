@@ -7,8 +7,8 @@ import holidays
 # --- 1. CONFIGURATION DES UTILISATEURS ---
 USERS = {
     "Julien": {"password": "123", "base_sup": 20.5, "full_name": "Ton Prénom", "role": "admin"},
-    "collegue1": {"password": "abc", "base_sup": 10.0, "full_name": "Jean Dupont", "role": "user"},
-    "collegue2": {"password": "456", "base_sup": 0.0, "full_name": "Marie Curie", "role": "user"}
+    #"collegue1": {"password": "abc", "base_sup": 10.0, "full_name": "Jean Dupont", "role": "user"},
+   # "collegue2": {"password": "456", "base_sup": 0.0, "full_name": "Marie Curie", "role": "user"}
 }
 
 # --- 2. CONFIGURATION PAGE ---
@@ -40,7 +40,12 @@ u_info = USERS[curr_user]
 if 'theme' not in st.session_state: st.session_state.theme = 'dark'
 def toggle_theme(): st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-common_css = "<style>.element-container h1 a { display: none !important; } .stButton>button { border-radius: 8px; }</style>"
+common_css = """
+<style>
+    .element-container h1 a, .element-container h2 a, .element-container h3 a { display: none !important; }
+    .stButton>button { border-radius: 8px; font-weight: bold; }
+</style>
+"""
 dark_css = ".stApp { background: #0d1117; } .main-card { background: rgba(255,255,255,0.05); padding: 25px; border-radius: 15px; text-align: center; border: 1px solid rgba(255,255,255,0.1); } h1, h2, h3, p, span { color: white !important; }"
 light_css = ".stApp { background: #FAF5F0; } .main-card { background: white; padding: 25px; border-radius: 15px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #E2E8F0; } h1, h2, h3, p, span { color: #1A202C !important; }"
 st.markdown(common_css + f"<style>{dark_css if st.session_state.theme == 'dark' else light_css}</style>", unsafe_allow_html=True)
@@ -119,43 +124,4 @@ with t1:
     
     if st.button("Enregistrer l'écart", use_container_width=True):
         val = (h_a + m_a/60) * (-1 if "moins" in a_t else 1)
-        new_row = pd.DataFrame([{"user": curr_user, "date": d_a.strftime("%d/%m/%Y"), "val": val}])
-        updated = pd.concat([df_ajust_raw, new_row], ignore_index=True)
-        conn.update(worksheet="Feuille 1", data=updated)
-        st.rerun()
-
-    # --- HISTORIQUE HEURES ---
-    u_hists = df_ajust_raw[df_ajust_raw['user'] == curr_user]
-    if not u_hists.empty:
-        st.write("---")
-        st.write("**Mes dernières saisies :**")
-        for i, row in u_hists.iloc[::-1].head(5).iterrows():
-            col_txt, col_del = st.columns([4, 1])
-            signe = "+" if row['val'] >= 0 else ""
-            col_txt.write(f" {row['date']} : {signe}{row['val']:.2f}h")
-            if col_del.button("🗑️", key=f"del_h_{i}"):
-                new_df = df_ajust_raw.drop(i)
-                conn.update(worksheet="Feuille 1", data=new_df)
-                st.rerun()
-
-with t2:
-    st.subheader("Ajouter un congé")
-    c_d = st.date_input("Date du congé", value=datetime.now(), key="date_c")
-    c_t = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
-    if st.button("Confirmer le congé", use_container_width=True):
-        new_c = pd.DataFrame([{"user": curr_user, "date": c_d.strftime("%d/%m/%Y"), "type": 1.0 if c_t == "Journée" else 0.5}])
-        updated_c = pd.concat([df_conges_raw, new_c], ignore_index=True)
-        conn.update(worksheet="Conges", data=updated_c)
-        st.rerun()
-
-    # --- HISTORIQUE CONGÉS ---
-    u_conges = df_conges_raw[df_conges_raw['user'] == curr_user]
-    if not u_conges.empty:
-        st.write("---")
-        st.write("**Mes congés enregistrés :**")
-        for i, row in u_conges.iloc[::-1].head(5).iterrows():
-            col_txt, col_del = st.columns([4, 1])
-            label = "Journée" if row['type'] == 1.0 else "Demi"
-            col_txt.write(f"📅 {row['date']} ({label})")
-            if col_del.button("
-                              
+        
