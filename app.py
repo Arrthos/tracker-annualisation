@@ -61,7 +61,7 @@ design_css = """
         color: #3498DB;
         padding: 6px 14px;
         border-radius: 20px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         font-weight: 600;
         margin-right: 8px;
         margin-bottom: 8px;
@@ -101,7 +101,6 @@ def to_hm(decimal_hours):
     if m == 60: h += 1; m = 0
     return f"{'-' if decimal_hours < 0 else '+'}{h}h{m:02d}"
 
-# Metriques calculées avec SOLIDARITÉ DYNAMIQUE
 def calculate_metrics(df_conges, solidarity_day):
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
@@ -110,16 +109,10 @@ def calculate_metrics(df_conges, solidarity_day):
     df = pd.DataFrame({'date': dr})
     df['wd'] = df['date'].dt.weekday
     df = df[df['wd'] < 5].copy()
-    
-    # Heures théoriques (L-M: 7.5h, Me-J-V: 7h)
     df['h_theo'] = np.where(df['wd'] <= 1, 7.5, 7.0)
-    
-    # Jours fériés (La journée de solidarité est TRAVAILLÉE donc h_theo reste > 0)
     fr_h = get_fr_holidays([sy, sy+1])
-    # Correction de la logique : La journée de solidarité est TRAVAILLÉE, donc pas d'heures théoriques à 0
     df['is_h'] = df['date'].dt.date.apply(lambda x: x in fr_h and x != solidarity_day)
     df.loc[df['is_h'], 'h_theo'] = 0
-    
     if not df_conges.empty:
         df_conges['dt_temp'] = pd.to_datetime(df_conges['date']).dt.date
         c_map = df_conges.groupby('dt_temp')['type'].sum().to_dict()
@@ -134,7 +127,7 @@ def load_img(path):
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25) # Par défaut Lundi Pentecôte
+if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
 if not st.session_state.authenticated:
     img_path = "image_11.png" 
@@ -148,19 +141,18 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# Changement de couleur de fond post-auth
 st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
 
-# --- 4. PARAMÈTRES (Sidebar discret) ---
+# --- 4. RÉGLAGE SOLIDARITÉ (Sidebar) ---
 with st.sidebar:
-    st.markdown("### ⚙️ Paramètres")
-    # Option pour changer la journée de solidarité
-    new_sol_date = st.date_input("Journée de Solidarité (Travaillée)", st.session_state.solidarity_date)
-    if new_sol_date != st.session_state.solidarity_date:
-        st.session_state.solidarity_date = new_sol_date
+    st.markdown("### ⚙️ Configuration")
+    # C'est ici que tu peux changer ta journée de solidarité
+    new_sol = st.date_input("Journée de Solidarité", st.session_state.solidarity_date)
+    if new_sol != st.session_state.solidarity_date:
+        st.session_state.solidarity_date = new_sol
         st.rerun()
     st.write("---")
-    if st.button("Se déconnecter"):
+    if st.button("Déconnexion"):
         st.session_state.authenticated = False
         st.rerun()
 
@@ -171,7 +163,6 @@ c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().da
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
-# Utilisation de la date de solidarité stockée en session
 du = calculate_metrics(u_c.copy(), st.session_state.solidarity_date)
 h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
 delta = USERS[curr_user]["base_sup"] + h_sup_total
@@ -179,45 +170,78 @@ fait = du + delta
 
 # --- 6. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
-
-# Progression Annuelle épurée (à gauche)
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Fait : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# Carte Balance
 status_color = "pos" if delta >= 0 else "neg"
-st.markdown(f"""
-    <div class="glass-card">
-        <small class="sub-text">BALANCE HEURES SUP.</small>
-        <div class="balance-val {status_color}">{to_hm(delta)}</div>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown(f'<div class="glass-card"><small class="sub-text">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
-# Dû / Fait
 c1, c2 = st.columns(2)
 c1.markdown(f"<p style='text-align:left;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
 c2.markdown(f"<p style='text-align:right;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 7. JOURS FÉRIÉS ÉPURÉS (Look Badges) ---
-st.markdown("#### 📅 Prochains Jours Fériés (2 semaines)")
+# --- 7. JOURS FÉRIÉS ÉPURÉS (2 SEMAINES) ---
+st.markdown("#### 📅 Jours Fériés (Prochaines 2 semaines)")
 fr_h = get_fr_holidays([datetime.now().year])
-future_h = []
-# On filtre sur les 14 prochains jours
+badges = []
 for d_h, name in sorted(fr_h.items()):
     if date.today() <= d_h <= (date.today() + timedelta(days=14)):
-        future_h.append(f'<span class="holiday-badge">{d_h.strftime("%d/%m")} : {name}</span>')
+        badges.append(f'<span class="holiday-badge">{d_h.strftime("%d/%m")} : {name}</span>')
 
-if future_h:
-    # Affichage des badges épurés sur une ligne
-    st.markdown(f'<div>{" ".join(future_h)}</div>', unsafe_allow_html=True)
+if badges:
+    st.markdown(f'<div>{" ".join(badges)}</div>', unsafe_allow_html=True)
 else:
-    st.info("Aucun jour férié dans les 2 prochaines semaines.")
+    st.info("Aucun jour férié proche.")
 
 st.write("")
 
 # --- 8. ONGLETS DE SAISIE ---
 t1, t2 = st.tabs(["⚡ SAISIE HEURES", "🌴 SAISIE CONGÉS"])
 
-# ... (Le reste du code pour les onglets est identique à la v3.0) ...
+with t1:
+    with st.expander("➕ Enregistrer des heures"):
+        with st.form("h_f", clear_on_submit=True):
+            typ = st.radio("Sens", ["Plus (+)", "Moins (-)"], horizontal=True)
+            d = st.date_input("Date", date.today())
+            h_col, m_col = st.columns(2)
+            hv, mv = h_col.number_input("H", 0, 12, 0), m_col.number_input("M", 0, 59, 0)
+            if st.form_submit_button("VALIDER"):
+                val = (hv + mv/60) * (-1 if "Moins" in typ else 1)
+                supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
+                st.rerun()
+    
+    for _, row in u_a.iloc[::-1].iterrows():
+        cx, cy = st.columns([0.85, 0.15])
+        cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+        if cy.button("🗑️", key=f"h_{row['id']}"):
+            supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
+
+with t2:
+    if not st.toggle("Mode Période", value=False):
+        d_u = st.date_input("Jour", date.today())
+        half = st.checkbox("Demi-journée")
+        if st.button("ENREGISTRER"):
+            if d_u.weekday() < 5:
+                supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
+                st.rerun()
+    else:
+        cs, ce = st.columns(2)
+        ds, de = cs.date_input("Début", date.today()), ce.date_input("Fin", date.today() + timedelta(days=1))
+        if st.button("ENREGISTRER PÉRIODE"):
+            gid = str(uuid.uuid4())
+            days = pd.date_range(ds, de, freq='D').date
+            rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
+            if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
+
+    if not u_c.empty:
+        u_c['dt'] = pd.to_datetime(u_c['date'])
+        for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
+            cx, cy = st.columns([0.85, 0.15])
+            s, e = data['dt'].min(), data['dt'].max()
+            lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
+            if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
+            cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            if cy.button("🗑️", key=f"g_{gid}"):
+                supabase.table("conges").delete().eq("group_id", gid).execute(); st.rerun()
