@@ -154,22 +154,37 @@ with tab2:
 
     @st.fragment
     def section_conges():
-        with st.expander("➕ Poser un congé"):
+      with st.expander("➕ Poser un congé / une période"):
             with st.form("c_form", clear_on_submit=True):
-                d_v = st.date_input("Date", value=date.today())
-                t_v = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
-                if st.form_submit_button("Confirmer", use_container_width=True):
-                    v_c = 1.0 if t_v == "Journée" else 0.5
-                    supabase.table("conges").insert({"user": curr_user, "date": str(d_v), "type": v_c}).execute()
-                    st.rerun()
-
-        st.subheader("🗑️ Liste")
-        if u_c.empty: st.info("Aucun congé.")
-        else:
-            for _, row in u_c.iloc[::-1].iterrows():
-                col_t, col_b = st.columns([4, 1])
-                col_t.write(f"📅 {row['date']} ({row['type']}j)")
-                if col_b.button("🗑️", key=f"c_{row['id']}"):
-                    supabase.table("conges").delete().eq("id", row['id']).execute()
-                    st.rerun()
-    section_conges()
+                # Sélection de plage de dates
+                sel_dates = st.date_input("Sélectionner une date ou une période", value=[date.today()])
+                
+                t_v = st.radio("Durée par jour", ["Journée", "Demi"], horizontal=True)
+                val_c = 1.0 if t_v == "Journée" else 0.5
+                
+                if st.form_submit_button("Confirmer l'enregistrement", use_container_width=True):
+                    # Cas 1 : Une seule date sélectionnée
+                    if len(sel_dates) == 1:
+                        dates_to_add = [sel_dates[0]]
+                    # Cas 2 : Une période (Date début et Date fin)
+                    else:
+                        start_d, end_d = sel_dates
+                        dates_to_add = pd.date_range(start=start_d, end=end_d, freq='D').date
+                    
+                    # Préparation des données pour Supabase
+                    new_rows = []
+                    for d in dates_to_add:
+                        # On ne pose pas de congés les week-ends (optionnel mais conseillé)
+                        if d.weekday() < 5: 
+                            new_rows.append({
+                                "user": curr_user, 
+                                "date": str(d), 
+                                "type": val_c
+                            })
+                    
+                    if new_rows:
+                        supabase.table("conges").insert(new_rows).execute()
+                        st.success(f"{len(new_rows)} jour(s) enregistré(s) !")
+                        st.rerun()
+                    else:
+                        st.warning("Aucun jour ouvré dans cette sélection.")
