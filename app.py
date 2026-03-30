@@ -94,7 +94,7 @@ if not st.session_state.authenticated:
         u = st.text_input("Utilisateur")
         p = st.text_input("Mot de passe", type="password")
         if st.form_submit_button("Entrer", use_container_width=True):
-            if u == "Julien" and p == "123": # Change ici si besoin
+            if u == "Julien" and p == "%Gfpass115": # Change ici si besoin
                 st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
     st.stop()
