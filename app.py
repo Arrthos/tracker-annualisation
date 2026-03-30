@@ -18,7 +18,6 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# CSS COMMUN (Suppression des icônes de chaînes/ancres)
 common_css = """
     <style>
     .element-container h1 a, .element-container h2 a, .element-container h3 a {
@@ -72,7 +71,8 @@ with st.sidebar:
 
 # --- 4. FONCTION DE CALCUL DU THÉORIQUE ---
 def get_theo(df_conges, start_date, solidarite_date):
-    hier = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # CHANGEMENT ICI : On prend 'maintenant' (inclus aujourd'hui) au lieu de 'hier'
+    aujourdhui = datetime.now().replace(hour=23, minute=59, second=59)
     total, curr = 0, start_date
     fr_holidays = holidays.France(years=[start_year, start_year + 1])
     
@@ -84,7 +84,7 @@ def get_theo(df_conges, start_date, solidarite_date):
                 dict_conges[d_obj] = float(row['type'])
             except: continue
 
-    while curr < hier:
+    while curr <= aujourdhui: # Changement du signe < vers <=
         d = curr.date()
         if curr.weekday() < 5: 
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0 
@@ -138,7 +138,7 @@ st.markdown(f"""
 
 col_a, col_b = st.columns(2)
 col_a.markdown(f'<p class="stat-label">HEURES FAITES</p><p class="stat-value">{fait:.2f}h</p>', unsafe_allow_html=True)
-col_b.markdown(f'<p class="stat-label">HEURES DUES</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
+col_b.markdown(f'<p class="stat-label">HEURES DUES (Inclus ajd)</p><p class="stat-value">{theo:.2f}h</p>', unsafe_allow_html=True)
 
 st.divider()
 
