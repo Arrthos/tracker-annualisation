@@ -24,9 +24,7 @@ def to_hm(decimal_hours):
     abs_h = abs(decimal_hours)
     h = int(abs_h)
     m = int(round((abs_h - h) * 60))
-    if m == 60:
-        h += 1
-        m = 0
+    if m == 60: h += 1; m = 0
     sign = "-" if decimal_hours < 0 else ("+" if decimal_hours > 0 else "")
     return f"{sign}{h}h{m:02d}"
 
@@ -56,13 +54,13 @@ def calculate_due_fast(df_conges, solidarity_day):
     return df_dates['h_theo'].sum()
 
 # --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state: 
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center;'>🔐 Connexion</h1>", unsafe_allow_html=True)
+    st.title("🔐 Connexion")
     with st.form("login"):
         u_i = st.text_input("Identifiant")
         p_i = st.text_input("Mot de passe", type="password")
@@ -95,10 +93,8 @@ fait = my_theo + my_delta
 objectif = 1652.0
 
 # --- 6. INTERFACE DASHBOARD ---
-# HELLO CENTRÉ
 st.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
 
-# Affichage Progression
 fait_str = to_hm(fait).replace("+", "")
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
@@ -108,7 +104,6 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
-# Bloc Balance
 balance_str = to_hm(my_delta)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
@@ -116,14 +111,9 @@ st.markdown(f"""
         <p style="margin:0; opacity:0.6; font-size:0.8em; color:white;">BALANCE</p>
         <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{balance_str}</h1>
     </div>
-    <div style="display:flex; justify-content:space-around; background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); margin-bottom:20px;">
-        <div style="text-align:center;"><small style="opacity:0.5; color:white;">FAIT (Détail)</small><br><b style="color:white;">{fait:.2f}h</b></div>
-        <div style="width:1px; background:rgba(255,255,255,0.1);"></div>
-        <div style="text-align:center;"><small style="opacity:0.5; color:white;">DÛ (Théorique)</small><br><b style="color:white;">{my_theo:.2f}h</b></div>
-    </div>
 """, unsafe_allow_html=True)
 
-# --- 7. ONGLETS ---
+# --- 7. ONGLETS (CORRIGÉS POUR L'ALIGNEMENT) ---
 tab1, tab2 = st.tabs(["⚡ Heures", "🌴 Congés"])
 
 with tab1:
@@ -143,10 +133,18 @@ with tab1:
         st.subheader("🗑️ Historique")
         if u_a.empty: st.info("Aucune heure enregistrée.")
         else:
+            # CORRECTION ICI : Utilisation de colonnes pour l'alignement
             for _, row in u_a.iloc[::-1].iterrows():
-                col_t, col_b = st.columns([4, 1])
-                col_t.write(f"**{row['date']}** : {to_hm(row['val'])}")
-                if col_b.button("🗑️", key=f"h_{row['id']}"):
+                col_text, col_btn = st.columns([5, 1])
+                
+                # Formatage date plus compact pour gagner de l'espace (DD/MM)
+                date_obj = pd.to_datetime(row['date'])
+                date_fmt = date_obj.strftime("%d/%m/%Y")
+                
+                col_text.write(f"**{date_fmt}** : {to_hm(row['val'])}")
+                
+                # Le bouton🗑️ est aligné sur la même ligne
+                if col_btn.button("🗑️", key=f"h_{row['id']}"):
                     supabase.table("heures").delete().eq("id", row['id']).execute()
                     st.rerun()
     section_heures()
@@ -195,14 +193,21 @@ with tab2:
         st.subheader("🗑️ Liste des congés")
         if u_c.empty: st.info("Aucun congé.")
         else:
+            # CORRECTION ICI AUSSI : Alignement pour les congés
             for _, row in u_c.iloc[::-1].iterrows():
-                col_t, col_b = st.columns([4, 1])
-                col_t.write(f"📅 {row['date']} ({row['type']}j)")
-                if col_b.button("🗑️", key=f"c_{row['id']}"):
+                col_text_c, col_btn_c = st.columns([5, 1])
+                
+                date_obj_c = pd.to_datetime(row['date'])
+                date_fmt_c = date_obj_c.strftime("%d/%m/%Y")
+                
+                col_text_c.write(f"📅 **{date_fmt_c}** ({row['type']}j)")
+                
+                if col_btn_c.button("🗑️", key=f"c_{row['id']}"):
                     supabase.table("conges").delete().eq("id", row['id']).execute()
                     st.rerun()
     section_conges()
 
+# --- 8. DÉCONNEXION ---
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.session_state.authenticated = False
     st.rerun()
