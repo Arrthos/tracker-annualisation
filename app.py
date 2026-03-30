@@ -65,18 +65,35 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 4. CHARGEMENT DES DONNÉES (VERSION SUPABASE) ---
-curr_user = st.session_state.user_key
-
+# --- 4. CHARGEMENT DES DONNÉES ---
 def fetch_data():
-    # Lecture table heures
-    h_query = supabase.table("heures").select("*").eq("user", curr_user).execute()
-    # Lecture table conges
-    c_query = supabase.table("conges").select("*").eq("user", curr_user).execute()
-    return pd.DataFrame(h_query.data), pd.DataFrame(c_query.data)
+    try:
+        h_query = supabase.table("heures").select("*").eq("user", curr_user).execute()
+        c_query = supabase.table("conges").select("*").eq("user", curr_user).execute()
+        
+        # Création de DataFrames vides avec colonnes si aucune donnée
+        df_h = pd.DataFrame(h_query.data) if h_query.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
+        df_c = pd.DataFrame(c_query.data) if c_query.data else pd.DataFrame(columns=['id', 'user', 'date', 'type'])
+        
+        return df_h, df_c
+    except Exception as e:
+        st.error(f"Erreur de connexion : {e}")
+        return pd.DataFrame(columns=['date']), pd.DataFrame(columns=['date'])
 
 u_a, u_c = fetch_data()
 
+# --- DANS TAB 2 (CALENDRIER) ---
+with tab2:
+    today = datetime.now()
+    posees = []
+    
+    # On vérifie si u_c n'est pas vide ET contient la colonne 'date'
+    if not u_c.empty and 'date' in u_c.columns:
+        u_c['dt_temp'] = pd.to_datetime(u_c['date']).dt.date
+        # Filtrage pour le calendrier
+        current_month_c = u_c[pd.to_datetime(u_c['date']).dt.month == today.month]
+        if not current_month_c.empty:
+            posees = current_month_c['dt_temp'].apply(lambda x: x.day).tolist()
 # --- 5. PARAMÈTRES & CALCULS ---
 st.sidebar.title("⚙️ Paramètres")
 sol_date = st.sidebar.date_input("Journée de Solidarité", value=date(2026, 6, 1))
