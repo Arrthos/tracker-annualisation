@@ -58,42 +58,37 @@ my_delta = USERS[curr_user]["base_sup"] + val_ajust
 fait = my_theo + my_delta
 
 # --- 4. INTERFACE : TABLEAU DE BORD ---
-st.title(f"Tableau de {curr_user}")
+st.title(f"Hello {curr_user}")
 
-# Barre de progression
-st.write(f"**Objectif annuel : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
+# BARRE DE PROGRESSION (Priorité 1)
+st.write(f"**Progression annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
 st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
-# --- BLOCS VISUELS (STYLE BULLE) ---
+# BALANCE (Priorité 2)
 h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 
-# 1. La Balance (Pleine largeur)
 st.markdown(f"""
     <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; border:2px solid {color_delta}; margin-bottom:10px;">
         <p style="margin:0; opacity:0.6; font-size:0.8em; color:white;">BALANCE</p>
-        <h1 style="color:{color_delta}; font-size:3em; margin:5px 0;">{'+' if my_delta >= 0 else '-'}{h}h{m:02d}</h1>
+        <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{'+' if my_delta >= 0 else '-'}{h}h{m:02d}</h1>
     </div>
 """, unsafe_allow_html=True)
 
-# 2. Fait et Dû (Côte à côte)
-col_f, col_d = st.columns(2)
-
-with col_f:
-    st.markdown(f"""
-        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:15px; text-align:center; border:1px solid rgba(255,255,255,0.2);">
-            <p style="margin:0; opacity:0.6; font-size:0.7em; color:white;">FAIT</p>
-            <h3 style="margin:5px 0; color:white;">{fait:.1f}h</h3>
+# BULLE UNIQUE FAIT / DÛ (Format compact)
+st.markdown(f"""
+    <div style="background:rgba(255,255,255,0.03); padding:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-around; align-items:center;">
+        <div style="text-align:center;">
+            <span style="opacity:0.5; font-size:0.7em; color:white; text-transform:uppercase;">Fait</span>
+            <span style="font-size:0.9em; font-weight:bold; color:white; margin-left:5px;">{fait:.1f}h</span>
         </div>
-    """, unsafe_allow_html=True)
-
-with col_d:
-    st.markdown(f"""
-        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:15px; text-align:center; border:1px solid rgba(255,255,255,0.2);">
-            <p style="margin:0; opacity:0.6; font-size:0.7em; color:white;">DÛ</p>
-            <h3 style="margin:5px 0; color:white;">{my_theo:.1f}h</h3>
+        <div style="width:1px; height:15px; background:rgba(255,255,255,0.2);"></div>
+        <div style="text-align:center;">
+            <span style="opacity:0.5; font-size:0.7em; color:white; text-transform:uppercase;">Dû</span>
+            <span style="font-size:0.9em; font-weight:bold; color:white; margin-left:5px;">{my_theo:.1f}h</span>
         </div>
-    """, unsafe_allow_html=True)
+    </div>
+""", unsafe_allow_html=True)
 
 st.write("---")
 
@@ -114,8 +109,8 @@ with t1:
                 conn.update(worksheet="Feuille 1", data=pd.concat([df_a, new], ignore_index=True))
                 st.rerun()
 
-    with st.expander("🗑️ Historique & Suppression", expanded=False):
-        if u_a.empty: st.info("Aucune donnée")
+    with st.expander("🗑️ Historique", expanded=False):
+        if u_a.empty: st.info("Vide")
         else:
             for i in u_a.index[::-1]:
                 row = u_a.loc[i]
@@ -138,15 +133,15 @@ with t2:
         for day in week:
             if day == 0: cal_html += "<div></div>"
             else:
-                bg = "#007bff" if day in posees else "rgba(255,255,255,0.1)"
+                bg = "#007bff" if day in posees else "rgba(255,255,255,0.05)"
                 border = "2px solid #238636" if day == today.day else "none"
-                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; color:white;'>{day}</div>"
+                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; color:white; font-size:0.8em;'>{day}</div>"
     cal_html += "</div>"
     st.markdown(cal_html, unsafe_allow_html=True)
 
     with st.expander("➕ Poser un congé", expanded=False):
         with st.form("c_form", clear_on_submit=True):
-            d_c = st.date_input("Date du repos", value=date.today())
+            d_c = st.date_input("Date", value=date.today())
             t_c = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
             if st.form_submit_button("Confirmer", use_container_width=True):
                 v_c = 1.0 if t_c == "Journée" else 0.5
@@ -154,8 +149,8 @@ with t2:
                 conn.update(worksheet="Conges", data=pd.concat([df_c, new_c], ignore_index=True))
                 st.rerun()
 
-    with st.expander("🗑️ Liste & Suppression", expanded=False):
-        if u_c.empty: st.info("Aucun congé")
+    with st.expander("🗑️ Liste des congés", expanded=False):
+        if u_c.empty: st.info("Vide")
         else:
             for i in u_c.index[::-1]:
                 row = u_c.loc[i]
