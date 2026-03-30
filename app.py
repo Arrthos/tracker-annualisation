@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import calendar
 import holidays
 from supabase import create_client, Client
@@ -11,7 +11,6 @@ st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 @st.cache_resource
 def get_supabase():
-    # Utilisation des secrets Supabase configurés
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 
 supabase = get_supabase()
@@ -19,6 +18,17 @@ supabase = get_supabase()
 @st.cache_data(ttl=3600)
 def get_fr_holidays(years):
     return holidays.France(years=years)
+
+def to_hm(decimal_hours):
+    """Convertit des heures décimales en format string XhXX"""
+    abs_h = abs(decimal_hours)
+    h = int(abs_h)
+    m = int(round((abs_h - h) * 60))
+    if m == 60: # Gestion de l'arrondi à 60min
+        h += 1
+        m = 0
+    sign = "-" if decimal_hours < 0 else ("+" if decimal_hours > 0 else "")
+    return f"{sign}{h}h{m:02d}"
 
 # --- 2. LOGIQUE DE CALCUL ---
 def calculate_due_fast(df_conges, solidarity_day):
@@ -62,15 +72,12 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 4. CHARGEMENT DES DONNÉES (SUPABASE) ---
+# --- 4. CHARGEMENT DES DONNÉES ---
 curr_user = st.session_state.user_key
 
 def fetch_data():
-    # Requêtes sur les tables créées en SQL
     h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
     c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
-    
-    # Protection contre les tables vides pour éviter les KeyError
     df_h = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
     df_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type'])
     return df_h, df_c
@@ -90,22 +97,28 @@ objectif = 1652.0
 # --- 6. INTERFACE DASHBOARD ---
 st.title(f"Hello {curr_user}")
 
-# Affichage Progression
+# Affichage Progression avec minutes précises
+fait_str = to_hm(fait).replace("+", "") # On enlève le + pour le total
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
         <p style="margin: 0; font-weight: bold; color: white;">Progression annuelle</p>
-        <p style="margin: 0; opacity: 0.8; color: white;"><b>{int(fait)}h</b> / {int(objectif)}h</p>
+        <p style="margin: 0; opacity: 0.8; color: white;"><b>{fait_str}</b> / {int(objectif)}h</p>
     </div>
 """, unsafe_allow_html=True)
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
 # Bloc Balance
-h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
+balance_str = to_hm(my_delta)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
     <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; border:2px solid {color_delta}; margin: 15px 0 10px 0;">
         <p style="margin:0; opacity:0.6; font-size:0.8em; color:white;">BALANCE</p>
-        <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{'+' if my_delta >= 0 else '-'}{h}h{m:02d}</h1>
+        <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{balance_str}</h1>
+    </div>
+    <div style="display:flex; justify-content:space-around; background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); margin-bottom:20px;">
+        <div style="text-align:center;"><small style="opacity:0.5; color:white;">FAIT (Détail)</small><br><b style="color:white;">{fait:.2f}h</b></div>
+        <div style="width:1px; background:rgba(255,255,255,0.1);"></div>
+        <div style="text-align:center;"><small style="opacity:0.5; color:white;">DÛ (Théorique)</small><br><b style="color:white;">{my_theo:.2f}h</b></div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -131,7 +144,7 @@ with tab1:
         else:
             for _, row in u_a.iloc[::-1].iterrows():
                 col_t, col_b = st.columns([4, 1])
-                col_t.write(f"**{row['date']}** : {row['val']:+.2f}h")
+                col_t.write(f"**{row['date']}** : {to_hm(row['val'])}")
                 if col_b.button("🗑️", key=f"h_{row['id']}"):
                     supabase.table("heures").delete().eq("id", row['id']).execute()
                     st.rerun()
@@ -144,7 +157,6 @@ with tab2:
         u_c['dt_obj'] = pd.to_datetime(u_c['date'])
         posees = u_c[u_c['dt_obj'].dt.month == today_dt.month]['dt_obj'].dt.day.tolist()
 
-    # Calendrier Visuel
     st.write(f"📅 **{calendar.month_name[today_dt.month]} {today_dt.year}**")
     cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:15px;'>"
     for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em; color:white;'>{d}</b>"
@@ -161,13 +173,12 @@ with tab2:
     def section_conges():
         with st.expander("➕ Poser un congé / une période"):
             with st.form("c_form", clear_on_submit=True):
-                # Sélection multi-dates pour les périodes
                 sel_dates = st.date_input("Date ou Période", value=[date.today()])
                 t_v = st.radio("Durée par jour", ["Journée", "Demi"], horizontal=True)
                 val_c = 1.0 if t_v == "Journée" else 0.5
                 
                 if st.form_submit_button("Confirmer", use_container_width=True):
-                    if isinstance(sel_dates, list) or isinstance(sel_dates, tuple):
+                    if isinstance(sel_dates, (list, tuple)):
                         if len(sel_dates) == 1:
                             dates_to_add = [sel_dates[0]]
                         else:
@@ -176,7 +187,6 @@ with tab2:
                         dates_to_add = [sel_dates]
                     
                     new_rows = [{"user": curr_user, "date": str(d), "type": val_c} for d in dates_to_add if d.weekday() < 5]
-                    
                     if new_rows:
                         supabase.table("conges").insert(new_rows).execute()
                         st.rerun()
@@ -192,7 +202,6 @@ with tab2:
                     st.rerun()
     section_conges()
 
-# --- 8. DÉCONNEXION ---
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.session_state.authenticated = False
     st.rerun()
