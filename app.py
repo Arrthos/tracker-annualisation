@@ -73,13 +73,20 @@ objectif = 1652.0
 # --- 6. DASHBOARD ---
 st.title(f"Hello {curr_user}")
 
-# Texte de la barre de progression (REAJOUTÉ ICI)
-col_prog1, col_prog2 = st.columns([1, 1])
-col_prog1.write(f"**Progression annuelle**")
-col_prog2.markdown(f"<p style='text-align:right;'><b>{int(fait)}h</b> / {int(objectif)}h</p>", unsafe_allow_html=True)
+# Alignement de la progression sur une seule ligne
+col_titre, col_stats = st.columns([1, 1])
+with col_titre:
+    st.write("**Progression annuelle**")
+with col_stats:
+    # On utilise du HTML pour aligner le texte à droite
+    st.markdown(f"<p style='text-align:right; margin:0;'><b>{int(fait)}h</b> / {int(objectif)}h</p>", unsafe_allow_html=True)
+
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
-# Balance (HTML/CSS)
+# Espace réduit avant la balance
+st.write("") 
+
+# Balance (Le reste du code HTML de la balance demeure identique)
 h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
