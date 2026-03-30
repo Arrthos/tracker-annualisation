@@ -110,7 +110,7 @@ def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
 # --- 3. AUTH ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
