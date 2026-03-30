@@ -6,7 +6,7 @@ import holidays
 
 # --- 1. CONFIGURATION DES UTILISATEURS ---
 USERS = {
-    "Julien": {"password": "123", "base_sup": 20.5, "full_name": "Ton Prénom", "role": "admin"},
+    "Julien": {"password": "123", "base_sup": 20.5, "full_name": "Julien", "role": "admin"},
     #"collegue1": {"password": "abc", "base_sup": 10.0, "full_name": "Jean Dupont", "role": "user"},
    # "collegue2": {"password": "456", "base_sup": 0.0, "full_name": "Marie Curie", "role": "user"}
 }
