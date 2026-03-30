@@ -139,14 +139,14 @@ fait = du + delta
 
 # --- 5. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Fait : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
 # Menu Paramètres épuré juste sous la carte
-with st.expander("⚙️ RÉGLER LA SOLIDARITÉ"):
+with st.expander("⚙️ Journée de solidarité"):
     new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
         st.session_state.solidarity_date = new_sol
