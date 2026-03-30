@@ -7,27 +7,44 @@ import holidays
 import uuid
 from supabase import create_client, Client
 
-# --- 1. CONFIGURATION & STYLE ---
+# --- 1. CONFIGURATION & CSS ROBUSTE ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-# CSS pour forcer l'alignement des corbeilles et l'aspect pro
 st.markdown("""
     <style>
+    /* Force l'alignement horizontal des historiques sur mobile */
     div[data-testid="stHorizontalBlock"] {
-        display: flex;
+        display: flex !important;
         flex-direction: row !important;
-        align-items: center;
-        margin-bottom: -12px !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        margin-bottom: -10px !important;
     }
+    /* Style des boutons corbeille */
     .stButton > button {
         margin-top: 0px !important;
-        padding: 2px 8px !important;
+        padding: 2px 10px !important;
+        background-color: rgba(255, 75, 75, 0.1);
+        border: 1px solid rgba(255, 75, 75, 0.2);
+    }
+    /* Grille du calendrier personnalisée pour éviter les bugs d'affichage */
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        text-align: center;
+        margin-top: 10px;
+    }
+    .cal-day-name { font-weight: bold; font-size: 0.7em; color: #888; padding-bottom: 5px; }
+    .cal-day {
+        padding: 10px 0;
         border-radius: 8px;
+        font-size: 0.9em;
+        background: rgba(255,255,255,0.05);
+        color: white;
     }
-    /* Style pour la barre de progression */
-    .stProgress > div > div > div > div {
-        background-color: #238636;
-    }
+    .cal-today { border: 2px solid #238636 !important; }
+    .cal-off { background: #007bff !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -49,7 +66,7 @@ def to_hm(decimal_hours):
     sign = "-" if decimal_hours < 0 else ("+" if decimal_hours > 0 else "")
     return f"{sign}{h}h{m:02d}"
 
-# --- 2. LOGIQUE DE CALCUL ---
+# --- 2. CALCULS ---
 def calculate_due_fast(df_conges, solidarity_day):
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
@@ -70,39 +87,37 @@ def calculate_due_fast(df_conges, solidarity_day):
     return df_dates['h_theo'].sum()
 
 # --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center;'>🔐 Connexion</h1>", unsafe_allow_html=True)
+    st.title("🔐 Connexion")
     with st.form("login"):
-        u_i = st.text_input("Identifiant")
-        p_i = st.text_input("Mot de passe", type="password")
+        u = st.text_input("Utilisateur")
+        p = st.text_input("Mot de passe", type="password")
         if st.form_submit_button("Entrer", use_container_width=True):
-            if u_i in USERS and USERS[u_i]["password"] == p_i:
-                st.session_state.authenticated, st.session_state.user_key = True, u_i
+            if u == "Julien" and p == "123": # Change ici si besoin
+                st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
     st.stop()
 
-# --- 4. CHARGEMENT DES DONNÉES ---
+# --- 4. CHARGEMENT DONNÉES ---
 curr_user = st.session_state.user_key
 h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
 c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
 u_a = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
 u_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type', 'group_id'])
 
-# --- 5. PARAMÈTRES & CALCULS ---
+# --- 5. CALCULS DASHBOARD ---
 sol_date = date(2026, 6, 1)
 my_theo = calculate_due_fast(u_c.copy(), sol_date)
 val_ajust = u_a['val'].astype(float).sum() if not u_a.empty else 0
-my_delta = USERS[curr_user]["base_sup"] + val_ajust
+my_delta = 20.5 + val_ajust 
 fait = my_theo + my_delta
 objectif = 1652.0
 
-# --- 6. DASHBOARD ---
+# --- 6. INTERFACE ---
 st.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
 
-# Barre de progression réintégrée
+# Barre de progression
 fait_str = to_hm(fait).replace("+", "")
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
@@ -112,7 +127,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
-# Bloc Balance
+# Balance
 balance_str = to_hm(my_delta)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
@@ -122,78 +137,81 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 7. ONGLETS ---
 tab1, tab2 = st.tabs(["⚡ Heures", "🌴 Congés"])
 
 with tab1:
     with st.expander("➕ Enregistrer des heures"):
-        with st.form("h_form", clear_on_submit=True):
+        with st.form("h_f", clear_on_submit=True):
             typ = st.radio("Type", ["Plus (+)", "Moins (-)"], horizontal=True)
-            dat = st.date_input("Date", value=date.today())
+            d = st.date_input("Date", value=date.today())
             c1, c2 = st.columns(2)
-            h_v, m_v = c1.number_input("H", 0, 12, 0), c2.number_input("M", 0, 59, 0)
+            hv, mv = c1.number_input("H", 0, 12, 0), c2.number_input("M", 0, 59, 0)
             if st.form_submit_button("Valider", use_container_width=True):
-                val = (h_v + m_v/60) * (-1 if "Moins" in typ else 1)
-                supabase.table("heures").insert({"user": curr_user, "date": str(dat), "val": val}).execute()
+                val = (hv + mv/60) * (-1 if "Moins" in typ else 1)
+                supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
     
     st.subheader("🗑️ Historique")
     if u_a.empty: st.info("Vide")
     else:
         for _, row in u_a.iloc[::-1].iterrows():
-            col_t, col_b = st.columns([0.85, 0.15])
-            d_f = pd.to_datetime(row['date']).strftime("%d/%m")
-            col_t.write(f"**{d_f}** : `{to_hm(row['val'])}`")
-            if col_b.button("🗑️", key=f"h_{row['id']}"):
+            cols = st.columns([0.85, 0.15])
+            dt = pd.to_datetime(row['date']).strftime("%d/%m")
+            cols[0].write(f"**{dt}** : `{to_hm(row['val'])}`")
+            if cols[1].button("🗑️", key=f"h_{row['id']}"):
                 supabase.table("heures").delete().eq("id", row['id']).execute()
                 st.rerun()
 
 with tab2:
-    # Calendrier visuel réintégré
-    today_dt = datetime.now()
+    # Calendrier Robuste
+    today = datetime.now()
+    st.write(f"📅 **{calendar.month_name[today.month]} {today.year}**")
     posees_jours = pd.to_datetime(u_c['date']).dt.day.tolist() if not u_c.empty else []
-    st.write(f"📅 **{calendar.month_name[today_dt.month]} {today_dt.year}**")
-    cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:15px;'>"
-    for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em; color:white;'>{d}</b>"
-    for week in calendar.monthcalendar(today_dt.year, today_dt.month):
+    
+    cal_head = "".join([f"<div class='cal-day-name'>{d}</div>" for d in ["L","M","M","J","V","S","D"]])
+    cal_body = ""
+    for week in calendar.monthcalendar(today.year, today.month):
         for day in week:
-            if day == 0: cal_html += "<div></div>"
+            if day == 0: cal_body += "<div></div>"
             else:
-                bg = "#007bff" if day in posees_jours else "rgba(255,255,255,0.05)"
-                border = "2px solid #238636" if day == today_dt.day else "none"
-                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; color:white; font-size:0.8em;'>{day}</div>"
-    st.markdown(cal_html + "</div>", unsafe_allow_html=True)
+                classes = "cal-day"
+                if day in posees_jours: classes += " cal-off"
+                if day == today.day: classes += " cal-today"
+                cal_body += f"<div class='{classes}'>{day}</div>"
+    
+    st.markdown(f"<div class='cal-grid'>{cal_head}{cal_body}</div><br>", unsafe_allow_html=True)
 
-    with st.expander("➕ Poser un congé / une période"):
-        with st.form("c_form", clear_on_submit=True):
-            sel_dates = st.date_input("Date ou Période", value=[date.today()])
-            t_v = st.radio("Durée par jour", ["Journée", "Demi"], horizontal=True)
-            val_c = 1.0 if t_v == "Journée" else 0.5
+    with st.expander("➕ Poser une période"):
+        with st.form("c_f", clear_on_submit=True):
+            sel = st.date_input("Dates", value=[date.today()])
             if st.form_submit_button("Confirmer", use_container_width=True):
                 g_id = str(uuid.uuid4())
-                if isinstance(sel_dates, (list, tuple)) and len(sel_dates) > 1:
-                    dates_to_add = pd.date_range(start=sel_dates[0], end=sel_dates[1], freq='D').date
-                else:
-                    dates_to_add = [sel_dates[0] if isinstance(sel_dates, (list, tuple)) else sel_dates]
+                if isinstance(sel, (list, tuple)) and len(sel) > 1:
+                    dr = pd.date_range(sel[0], sel[1], freq='D').date
+                else: dr = [sel[0] if isinstance(sel, (list, tuple)) else sel]
                 
-                new_rows = [{"user": curr_user, "date": str(d), "type": val_c, "group_id": g_id} for d in dates_to_add if d.weekday() < 5]
-                if new_rows:
-                    supabase.table("conges").insert(new_rows).execute()
+                rows = [{"user": curr_user, "date": str(d), "type": 1.0, "group_id": g_id} for d in dr if d.weekday() < 5]
+                if rows:
+                    supabase.table("conges").insert(rows).execute()
                     st.rerun()
 
     st.subheader("🗑️ Liste des congés")
     if u_c.empty: st.info("Aucun congé.")
     else:
-        u_c['dt_obj'] = pd.to_datetime(u_c['date'])
-        groups = u_c.sort_values('dt_obj', ascending=False).groupby('group_id', sort=False)
-        for g_id, data in groups:
-            col_t, col_b = st.columns([0.85, 0.15])
-            start_f = data['dt_obj'].min().strftime("%d/%m")
-            end_f = data['dt_obj'].max().strftime("%d/%m")
-            label = f"Du {start_f} au {end_f}" if len(data) > 1 else f"Le {start_f}"
-            col_t.write(f"📅 **{label}** ({data.iloc[0]['type']}j)")
-            if col_b.button("🗑️", key=f"g_{g_id}"):
-                supabase.table("conges").delete().eq("group_id", g_id).execute()
+        u_c['dt'] = pd.to_datetime(u_c['date'])
+        # Tri et groupement pour affichage propre
+        groups = u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False)
+        for gid, data in groups:
+            cols = st.columns([0.85, 0.15])
+            start, end = data['dt'].min(), data['dt'].max()
+            if len(data) > 1:
+                lbl = f"Du {start.strftime('%d/%m')} au {end.strftime('%d/%m')}"
+            else:
+                lbl = f"Le {start.strftime('%d/%m')}"
+            
+            cols[0].write(f"🌴 **{lbl}**")
+            if cols[1].button("🗑️", key=f"g_{gid}"):
+                supabase.table("conges").delete().eq("group_id", gid).execute()
                 st.rerun()
 
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
