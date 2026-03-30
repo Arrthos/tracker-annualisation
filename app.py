@@ -24,7 +24,7 @@ def to_hm(decimal_hours):
     abs_h = abs(decimal_hours)
     h = int(abs_h)
     m = int(round((abs_h - h) * 60))
-    if m == 60: # Gestion de l'arrondi à 60min
+    if m == 60:
         h += 1
         m = 0
     sign = "-" if decimal_hours < 0 else ("+" if decimal_hours > 0 else "")
@@ -62,7 +62,7 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔐 Connexion")
+    st.markdown("<h1 style='text-align: center;'>🔐 Connexion</h1>", unsafe_allow_html=True)
     with st.form("login"):
         u_i = st.text_input("Identifiant")
         p_i = st.text_input("Mot de passe", type="password")
@@ -95,10 +95,11 @@ fait = my_theo + my_delta
 objectif = 1652.0
 
 # --- 6. INTERFACE DASHBOARD ---
-st.title(f"Hello {curr_user}")
+# HELLO CENTRÉ
+st.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
 
-# Affichage Progression avec minutes précises
-fait_str = to_hm(fait).replace("+", "") # On enlève le + pour le total
+# Affichage Progression
+fait_str = to_hm(fait).replace("+", "")
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
         <p style="margin: 0; font-weight: bold; color: white;">Progression annuelle</p>
