@@ -105,7 +105,7 @@ def calculate_due_fast(df_conges, solidarity_day):
 
 # --- 3. AUTHENTIFICATION ---
 # Mots de passe sérieux pour la mise en service
-USERS = {"Julien": {"password": "Julien2026!", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state: 
     st.session_state.authenticated = False
