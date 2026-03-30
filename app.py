@@ -11,19 +11,15 @@ import os
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-# CSS pour le look moderne (Gris Anthracite pour le Dashboard)
 design_css = """
     <style>
-    /* FOND LOGIN : Noir Pur pour fusionner avec l'image */
     .stApp { background-color: #000000 !important; color: #EAEAEA; }
     header {visibility: hidden;}
     
-    /* FOND DASHBOARD : Gris Anthracite Moderne (moins foncé) */
     body[data-authenticated="true"] .stApp {
         background-color: #1A1C23 !important; 
     }
 
-    /* CARTES : Glassmorphism moderne */
     .glass-card {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -32,29 +28,18 @@ design_css = """
         text-align: center;
         backdrop-filter: blur(15px);
         margin: 15px 0;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     }
 
-    .balance-val {
-        font-size: 5.5rem;
-        font-weight: 800;
-        letter-spacing: -3px;
-        margin: 5px 0;
-    }
+    .balance-val { font-size: 5.5rem; font-weight: 800; letter-spacing: -3px; margin: 5px 0; }
     .pos { color: #2ECC71; }
     .neg { color: #FF4B4B; }
 
-    .stMarkdown, p, small, label { color: #F0F2F6 !important; }
-    .sub-text { color: #9BA1B0 !important; font-size: 0.85rem; font-weight: 500; }
-    
-    /* PROGRESS BAR */
     .stProgress > div > div > div > div {
         background: linear-gradient(90deg, #3498DB, #2ECC71);
         height: 10px;
         border-radius: 5px;
     }
 
-    /* Style pour les badges de jours fériés épurés */
     .holiday-badge {
         display: inline-block;
         background: rgba(52, 152, 219, 0.15);
@@ -68,24 +53,22 @@ design_css = """
         border: 1px solid rgba(52, 152, 219, 0.3);
     }
 
-    /* LOGIN LOGO */
-    .login-logo-container {
-        display: flex;
-        justify-content: center;
-        margin-top: 40px;
-        margin-bottom: 10px;
-    }
-    
-    [data-testid="stForm"] {
-        background: transparent !important;
+    /* Style spécifique pour l'expander de paramètres */
+    .stDetails {
         border: none !important;
-        padding: 0 !important;
+        background: transparent !important;
+    }
+    summary { 
+        color: #9BA1B0 !important; 
+        font-size: 0.8rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     </style>
 """
 st.markdown(design_css, unsafe_allow_html=True)
 
-# --- 2. FONCTIONS LOGIQUES ---
+# --- 2. LOGIQUE ---
 @st.cache_resource
 def get_supabase(): 
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
@@ -123,16 +106,15 @@ def calculate_metrics(df_conges, solidarity_day):
 def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
-# --- 3. AUTHENTIFICATION & PARAMÈTRES ---
+# --- 3. AUTHENTIFICATION ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
-
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
 if not st.session_state.authenticated:
-    img_path = "image_11.png" 
+    img_path = "image_11.png"
     if os.path.exists(img_path):
-        st.markdown(f'<div class="login-logo-container"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
         if st.form_submit_button("Connexion"):
@@ -143,20 +125,7 @@ if not st.session_state.authenticated:
 
 st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
 
-# --- 4. RÉGLAGE SOLIDARITÉ (Sidebar) ---
-with st.sidebar:
-    st.markdown("### ⚙️ Configuration")
-    # C'est ici que tu peux changer ta journée de solidarité
-    new_sol = st.date_input("Journée de Solidarité", st.session_state.solidarity_date)
-    if new_sol != st.session_state.solidarity_date:
-        st.session_state.solidarity_date = new_sol
-        st.rerun()
-    st.write("---")
-    if st.button("Déconnexion"):
-        st.session_state.authenticated = False
-        st.rerun()
-
-# --- 5. DATA & CALCULS ---
+# --- 4. DATA & CALCULS ---
 curr_user = st.session_state.user_key
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
@@ -168,22 +137,29 @@ h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
 delta = USERS[curr_user]["base_sup"] + h_sup_total
 fait = du + delta
 
-# --- 6. DASHBOARD ---
+# --- 5. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Fait : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
 status_color = "pos" if delta >= 0 else "neg"
-st.markdown(f'<div class="glass-card"><small class="sub-text">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
+
+# Menu Paramètres épuré juste sous la carte
+with st.expander("⚙️ RÉGLER LA SOLIDARITÉ"):
+    new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
+    if new_sol != st.session_state.solidarity_date:
+        st.session_state.solidarity_date = new_sol
+        st.rerun()
 
 c1, c2 = st.columns(2)
-c1.markdown(f"<p style='text-align:left;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
-c2.markdown(f"<p style='text-align:right;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
+c1.markdown(f"<p style='text-align:left;'><small style='color:#9BA1B0'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
+c2.markdown(f"<p style='text-align:right;'><small style='color:#9BA1B0'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 7. JOURS FÉRIÉS ÉPURÉS (2 SEMAINES) ---
-st.markdown("#### 📅 Jours Fériés (Prochaines 2 semaines)")
+# --- 6. FÉRIÉS (2 SEMAINES) ---
+st.markdown("#### 📅 Prochains Jours Fériés")
 fr_h = get_fr_holidays([datetime.now().year])
 badges = []
 for d_h, name in sorted(fr_h.items()):
@@ -193,12 +169,12 @@ for d_h, name in sorted(fr_h.items()):
 if badges:
     st.markdown(f'<div>{" ".join(badges)}</div>', unsafe_allow_html=True)
 else:
-    st.info("Aucun jour férié proche.")
+    st.info("Aucun férié dans les 2 prochaines semaines.")
 
 st.write("")
 
-# --- 8. ONGLETS DE SAISIE ---
-t1, t2 = st.tabs(["⚡ SAISIE HEURES", "🌴 SAISIE CONGÉS"])
+# --- 7. ONGLETS ---
+t1, t2 = st.tabs(["⚡ HEURES SUP", "🌴 CONGÉS"])
 
 with t1:
     with st.expander("➕ Enregistrer des heures"):
