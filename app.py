@@ -62,30 +62,28 @@ with st.sidebar:
 
 # --- 4. CALCULS AUTOMATIQUES ---
 def get_totals(df_ajustements, df_conges, start_date, solidarite_date):
+    # On inclut la journée en cours
     aujourdhui = datetime.now().replace(hour=23, minute=59, second=59)
     theo_total = 0
     curr = start_date
     fr_holidays = holidays.France(years=[start_year, start_year + 1])
     
-    # Dictionnaires pour accès rapide
     dict_conges = {pd.to_datetime(row['date'], dayfirst=True).date(): float(row['type']) for _, row in df_conges.iterrows()}
-    dict_ajust = {pd.to_datetime(row['date'], dayfirst=True).date(): float(row['val']) for _, row in df_ajustements.iterrows()}
 
     while curr <= aujourdhui:
         d = curr.date()
-        if curr.weekday() < 5: # Lu-Ve
+        if curr.weekday() < 5: # Lundi à Vendredi
             h_jour = 7.5 if curr.weekday() <= 1 else 7.0
             est_ferie = (d in fr_holidays) and (d != solidarite_date)
             
             if not est_ferie:
-                # Si c'est un jour ouvré non férié, on doit des heures
                 conge = dict_conges.get(d, 0)
                 theo_total += h_jour * (1 - conge)
         curr += timedelta(days=1)
     
-    # Le delta est simplement la somme de tous les ajustements saisis
-    delta_total = df_ajustements['val'].sum() if not df_ajustements.empty else 0
-    return theo_total, delta_total
+    # Delta = somme des régulations saisies
+    delta_saisi = df_ajustements['val'].sum() if not df_ajustements.empty else 0
+    return theo_total, delta_saisi
 
 # --- 5. CHARGEMENT DES DONNÉES ---
 df_ajust_raw = conn.read(worksheet="Feuille 1", ttl=0)
@@ -100,28 +98,31 @@ def filter_by_season(df, start_date):
 df_ajust = filter_by_season(df_ajust_raw, date_debut_saison)
 df_conges = filter_by_season(df_conges_raw, date_debut_saison)
 
+# --- CONFIGURATION DE TA BASE ---
 OBJECTIF_ANNUEL = 1652.0
-# Base historique si besoin
-current_base = 992.25 if start_year == 2025 else 0.0
+# On met 20.5 ici pour tes 20h30 d'avance déjà acquises
+current_base_sup = 20.5 
 
-theo, delta = get_totals(df_ajust, df_conges, date_debut_saison, date_solidarite)
-fait = theo + delta + current_base
-jours_repos = delta / 7.2 if delta > 0 else 0
+theo, delta_saisi = get_totals(df_ajust, df_conges, date_debut_saison, date_solidarite)
+# Le delta final est ton avance de base + tes nouvelles saisies
+total_delta = current_base_sup + delta_saisi
+fait = theo + total_delta
+jours_repos = total_delta / 7.2 if total_delta > 0 else 0
 
 # --- 6. AFFICHAGE ---
 st.markdown(f"### Progression : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h")
 st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
-color = "#238636" if delta >= 0 else "#da3633"
-h_delta, m_delta = int(abs(delta)), int((abs(delta) - int(abs(delta))) * 60)
+color = "#238636" if total_delta >= 0 else "#da3633"
+h_delta, m_delta = int(abs(total_delta)), int((abs(total_delta) - int(abs(total_delta))) * 60)
 
 st.markdown(f"""
     <div class="main-card">
         <p class="stat-label">Balance Heures Sup' / Moins</p>
         <h1 style="color: {color} !important; font-size: 3.5em; margin: 10px 0;">
-            {'+' if delta >= 0 else '-'}{h_delta}h{m_delta:02d}
+            {'+' if total_delta >= 0 else '-'}{h_delta}h{m_delta:02d}
         </h1>
-        {f'<p class="reward-text">≃ {jours_repos:.1f} jours de repos récupérables</p>' if delta > 0 else ''}
+        {f'<p class="reward-text">≃ {jours_repos:.1f} jours de repos récupérables</p>' if total_delta > 0 else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -132,19 +133,19 @@ col_b.markdown(f'<p class="stat-label">TOTAL DÛ (Inclus ajd)</p><p class="stat-
 st.divider()
 
 # --- 7. ONGLETS ---
-tab1, tab2 = st.tabs(["⚡ Ajuster le Temps", "🌴 Gestion Congés"])
+tab1, tab2 = st.tabs(["⚡ Réguler Heures Sup", "🌴 Gestion Congés"])
 
 with tab1:
-    st.subheader("Réguler ma journée")
+    st.subheader("Saisir un écart (Sup ou Moins)")
     c1, c2 = st.columns(2)
-    adj_type = c1.selectbox("Type", ["Heures Supplémentaires (+)", "Heures en moins (-)"])
-    d_adj = c2.date_input("Date", value=datetime.now())
+    adj_type = c1.selectbox("Type d'écart", ["Heures Supplémentaires (+)", "Heures en moins (-)"])
+    d_adj = c2.date_input("Date de l'écart", value=datetime.now())
     
     col1, col2 = st.columns(2)
     h_adj = col1.number_input("Heures", 0, 10, 0)
     m_adj = col2.number_input("Minutes", 0, 59, 0)
     
-    if st.button("Enregistrer l'ajustement", use_container_width=True):
+    if st.button("Enregistrer l'écart", use_container_width=True):
         val_finale = h_adj + m_adj/60
         if "moins" in adj_type: val_finale = -val_finale
         
@@ -154,7 +155,7 @@ with tab1:
         st.rerun()
 
     if not df_ajust.empty:
-        st.write("**Historique des régulations :**")
+        st.write("**Historique des écarts saisis :**")
         for i, row in df_ajust.iloc[::-1].head(10).iterrows():
             ct, cd = st.columns([4, 1])
             signe = "+" if row['val'] >= 0 else ""
@@ -165,7 +166,6 @@ with tab1:
                 st.rerun()
 
 with tab2:
-    # (Le code des congés reste identique à la version précédente)
     st.subheader("Ajouter un congé")
     c_date = st.date_input("Date du congé", value=datetime.now(), key="cong_date")
     c_type = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
