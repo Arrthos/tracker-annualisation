@@ -6,7 +6,8 @@ import calendar
 import holidays
 
 # --- 1. CONFIGURATION ---
-USERS = {"Julien": {"password": "123", "base_sup": 20.5, "full_name": "Julien", "role": "admin"}}
+# Note : À terme, déplace ceci dans st.secrets pour la prod
+USERS = {"Julien": {"password": "123", "base_sup": 20.5, "role": "admin"}}
 OBJECTIF_ANNUEL = 1652.0
 
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
@@ -26,7 +27,12 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 3. CHARGEMENT & CALCULS ---
+# --- 3. PARAMÈTRES (SIDEBAR) ---
+st.sidebar.title("⚙️ Paramètres")
+# Case calendrier pour la journée de solidarité (Lundi de Pentecôte 2024 par défaut)
+sol_date = st.sidebar.date_input("Journée de Solidarité", value=date(2024, 5, 20))
+
+# --- 4. CHARGEMENT & CALCULS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 df_a = conn.read(worksheet="Feuille 1", ttl=0).dropna(how='all')
 df_c = conn.read(worksheet="Conges", ttl=0).dropna(how='all')
@@ -35,36 +41,41 @@ curr_user = st.session_state.user_key
 u_a = df_a[df_a['user'] == curr_user].copy()
 u_c = df_c[df_c['user'] == curr_user].copy()
 
-def calculate_due(uid, df_conges):
+def calculate_due(uid, df_conges, solidarity_day):
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
     start = datetime(sy, 9, 1)
     fr_h = holidays.France(years=[sy, sy+1])
+    
+    # On retire la journée de solidarité des jours fériés pour qu'elle soit comptée comme travaillée
+    if solidarity_day in fr_h:
+        del fr_h[solidarity_day]
+        
     d_conges = {pd.to_datetime(r['date'], dayfirst=True).date(): float(r['type']) for _, r in df_conges.iterrows()} if not df_conges.empty else {}
     theo = 0
     curr = start
     while curr <= now.replace(hour=23, minute=59):
         d = curr.date()
-        if curr.weekday() < 5:
-            h_j = 7.5 if curr.weekday() <= 1 else 7.0
-            if not (d in fr_h and d != date(sy+1, 6, 1)):
+        if curr.weekday() < 5: # Lundi-Vendredi
+            h_j = 7.5 if curr.weekday() <= 1 else 7.0 # Lun, Mar = 7.5h | Mer, Jeu, Ven = 7.0h
+            if d not in fr_h:
                 theo += h_j * (1 - d_conges.get(d, 0))
         curr += timedelta(days=1)
     return theo
 
-my_theo = calculate_due(curr_user, u_c)
+my_theo = calculate_due(curr_user, u_c, sol_date)
 val_ajust = u_a['val'].sum() if not u_a.empty else 0
 my_delta = USERS[curr_user]["base_sup"] + val_ajust
 fait = my_theo + my_delta
 
-# --- 4. INTERFACE : TABLEAU DE BORD ---
+# --- 5. INTERFACE : TABLEAU DE BORD ---
 st.title(f"Hello {curr_user}")
 
-# BARRE DE PROGRESSION (Priorité 1)
+# BARRE DE PROGRESSION
 st.write(f"**Progression annuelle : {int(fait)}h / {int(OBJECTIF_ANNUEL)}h**")
 st.progress(min(fait / OBJECTIF_ANNUEL, 1.0))
 
-# BALANCE (Priorité 2)
+# BALANCE (Style original conservé)
 h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 
@@ -75,7 +86,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# BULLE UNIQUE FAIT / DÛ (Format compact)
+# BULLE UNIQUE FAIT / DÛ
 st.markdown(f"""
     <div style="background:rgba(255,255,255,0.03); padding:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-around; align-items:center;">
         <div style="text-align:center;">
@@ -92,7 +103,7 @@ st.markdown(f"""
 
 st.write("---")
 
-# --- 5. ONGLETS ---
+# --- 6. ONGLETS ---
 t1, t2 = st.tabs(["⚡ Heures", "🌴 Congés"])
 
 with t1:
@@ -106,7 +117,9 @@ with t1:
             if st.form_submit_button("Valider", use_container_width=True):
                 val = (h_s + m_s/60) * (-1 if "Moins" in typ else 1)
                 new = pd.DataFrame([{"user": curr_user, "date": dat.strftime("%d/%m/%Y"), "val": val}])
-                conn.update(worksheet="Feuille 1", data=pd.concat([df_a, new], ignore_index=True))
+                # SÉCURITÉ : On relit la feuille juste avant d'écrire pour ne rien écraser
+                latest_df = conn.read(worksheet="Feuille 1", ttl=0).dropna(how='all')
+                conn.update(worksheet="Feuille 1", data=pd.concat([latest_df, new], ignore_index=True))
                 st.rerun()
 
     with st.expander("🗑️ Historique", expanded=False):
@@ -117,7 +130,9 @@ with t1:
                 c_t, c_b = st.columns([4, 1])
                 c_t.write(f"**{row['date']}** : {row['val']:+.2f}h")
                 if c_b.button("🗑️", key=f"del_h_{i}"):
-                    conn.update(worksheet="Feuille 1", data=df_a.drop(i))
+                    # SÉCURITÉ : On relit avant de supprimer
+                    latest_df = conn.read(worksheet="Feuille 1", ttl=0).dropna(how='all')
+                    conn.update(worksheet="Feuille 1", data=latest_df.drop(i))
                     st.rerun()
 
 with t2:
@@ -146,7 +161,9 @@ with t2:
             if st.form_submit_button("Confirmer", use_container_width=True):
                 v_c = 1.0 if t_c == "Journée" else 0.5
                 new_c = pd.DataFrame([{"user": curr_user, "date": d_c.strftime("%d/%m/%Y"), "type": v_c}])
-                conn.update(worksheet="Conges", data=pd.concat([df_c, new_c], ignore_index=True))
+                # SÉCURITÉ : On relit avant d'ajouter
+                latest_df_c = conn.read(worksheet="Conges", ttl=0).dropna(how='all')
+                conn.update(worksheet="Conges", data=pd.concat([latest_df_c, new_c], ignore_index=True))
                 st.rerun()
 
     with st.expander("🗑️ Liste des congés", expanded=False):
@@ -157,9 +174,11 @@ with t2:
                 c_t, c_b = st.columns([4, 1])
                 c_t.write(f"📅 {row['date']} ({row['type']}j)")
                 if c_b.button("🗑️", key=f"del_c_{i}"):
-                    conn.update(worksheet="Conges", data=df_c.drop(i))
+                    # SÉCURITÉ : On relit avant de supprimer
+                    latest_df_c = conn.read(worksheet="Conges", ttl=0).dropna(how='all')
+                    conn.update(worksheet="Conges", data=latest_df_c.drop(i))
                     st.rerun()
 
-if st.sidebar.button("🚪 Déconnexion"):
+if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.session_state.authenticated = False
     st.rerun()
