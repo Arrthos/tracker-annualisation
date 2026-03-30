@@ -23,7 +23,7 @@ design_css = """
         background-color: #1A1C23 !important; 
     }
 
-    /* CARTES : Glassmorphism plus contrasté */
+    /* CARTES : Glassmorphism moderne */
     .glass-card {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -109,12 +109,13 @@ def calculate_metrics(df_conges, solidarity_day):
 def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
-# --- 3. AUTH ---
+# --- 3. AUTHENTIFICATION ---
 USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    img_path = "image_11.png" # ou ton nom de fichier image_b325bd.png
+    # Utilisation de ton image téléchargée
+    img_path = "image_11.png" 
     if os.path.exists(img_path):
         st.markdown(f'<div class="login-logo-container"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
     
@@ -126,10 +127,10 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# Changement de couleur de fond post-auth via attribut data
+# Application du fond gris après authentification
 st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
 
-# --- 4. DATA & CALCULS ---
+# --- 4. DONNÉES & CALCULS ---
 curr_user = st.session_state.user_key
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
@@ -145,11 +146,11 @@ fait = du + delta
 # --- 5. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 
-# Progression Annuelle sans % et à gauche
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
+# Progression Annuelle à gauche sans %
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Fait : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# Balance Card
+# Carte Balance
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
@@ -158,14 +159,14 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# Dû / Fait
+# Dû / Fait en bas de carte
 c1, c2 = st.columns(2)
 c1.markdown(f"<p style='text-align:left;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
 c2.markdown(f"<p style='text-align:right;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# Onglets
+# Onglets de saisie
 t1, t2 = st.tabs(["⚡ SAISIE HEURES", "🌴 SAISIE CONGÉS"])
 
 with t1:
@@ -180,6 +181,7 @@ with t1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
     
+    # Historique Heures
     for _, row in u_a.iloc[::-1].iterrows():
         cx, cy = st.columns([0.85, 0.15])
         cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
@@ -203,6 +205,7 @@ with t2:
             rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
             if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
 
+    # Historique Congés
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
