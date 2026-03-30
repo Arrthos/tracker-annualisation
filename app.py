@@ -4,10 +4,10 @@ import numpy as np
 from datetime import datetime, date
 import calendar
 import holidays
-import uuid  # Pour grouper les congés
+import uuid
 from supabase import create_client, Client
 
-# --- 1. CONFIGURATION & CSS ---
+# --- CONFIGURATION & CSS ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 st.markdown("""
@@ -43,7 +43,7 @@ def to_hm(decimal_hours):
     sign = "-" if decimal_hours < 0 else ("+" if decimal_hours > 0 else "")
     return f"{sign}{h}h{m:02d}"
 
-# --- 2. LOGIQUE DE CALCUL ---
+# --- LOGIQUE CALCUL ---
 def calculate_due_fast(df_conges, solidarity_day):
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
@@ -63,12 +63,11 @@ def calculate_due_fast(df_conges, solidarity_day):
         df_dates['h_theo'] *= (1 - df_dates['conge_val'])
     return df_dates['h_theo'].sum()
 
-# --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
+# --- AUTH ---
+USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center;'>🔐 Connexion</h1>", unsafe_allow_html=True)
     with st.form("login"):
         u_i = st.text_input("Identifiant")
         p_i = st.text_input("Mot de passe", type="password")
@@ -78,123 +77,98 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 4. DATA ---
+# --- DATA LOADING ---
 curr_user = st.session_state.user_key
 h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
-# On récupère aussi le group_id pour les congés
 c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
+
 u_a = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
 u_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type', 'group_id'])
 
-# --- 5. CALCULS ---
+# SECURITE : Si group_id manque (anciens congés), on en crée un temporaire pour éviter le crash
+if not u_c.empty and 'group_id' not in u_c.columns:
+    u_c['group_id'] = u_c['id'].astype(str)
+elif not u_c.empty:
+    u_c['group_id'] = u_c['group_id'].fillna(u_c['id'].astype(str))
+
+# --- CALCULS FINAUX ---
 sol_date = date(2026, 6, 1)
 my_theo = calculate_due_fast(u_c.copy(), sol_date)
 val_ajust = u_a['val'].astype(float).sum() if not u_a.empty else 0
 my_delta = USERS[curr_user]["base_sup"] + val_ajust
 fait = my_theo + my_delta
-objectif = 1652.0
 
-# --- 6. INTERFACE ---
-st.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
+# --- INTERFACE ---
+st.markdown(f"<h1 style='text-align: center;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
 
-# Barre de progression
-fait_str = to_hm(fait).replace("+", "")
-st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
-        <p style="margin: 0; font-weight: bold; color: white;">Progression annuelle</p>
-        <p style="margin: 0; opacity: 0.8; color: white;"><b>{fait_str}</b> / {int(objectif)}h</p>
-    </div>
-""", unsafe_allow_html=True)
-st.progress(min(max(fait / objectif, 0.0), 1.0))
-
-# Balance
-balance_str = to_hm(my_delta)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
-    <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; border:2px solid {color_delta}; margin: 15px 0 20px 0;">
+    <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; border:2px solid {color_delta}; margin-bottom:20px;">
         <p style="margin:0; opacity:0.6; font-size:0.8em; color:white;">BALANCE</p>
-        <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{balance_str}</h1>
+        <h1 style="color:{color_delta}; font-size:3.5em; margin:5px 0;">{to_hm(my_delta)}</h1>
     </div>
 """, unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["⚡ Heures", "🌴 Congés"])
 
 with tab1:
-    with st.expander("➕ Enregistrer des heures"):
+    with st.expander("➕ Enregistrer"):
         with st.form("h_form", clear_on_submit=True):
             typ = st.radio("Type", ["Plus (+)", "Moins (-)"], horizontal=True)
             dat = st.date_input("Date", value=date.today())
             c1, c2 = st.columns(2)
             h_v, m_v = c1.number_input("H", 0, 12, 0), c2.number_input("M", 0, 59, 0)
-            if st.form_submit_button("Valider", use_container_width=True):
+            if st.form_submit_button("Valider"):
                 val = (h_v + m_v/60) * (-1 if "Moins" in typ else 1)
                 supabase.table("heures").insert({"user": curr_user, "date": str(dat), "val": val}).execute()
                 st.rerun()
     
-    st.subheader("🗑️ Historique")
-    if u_a.empty: st.info("Vide")
-    else:
+    if not u_a.empty:
         for _, row in u_a.iloc[::-1].iterrows():
             col_t, col_b = st.columns([0.85, 0.15])
-            d_f = pd.to_datetime(row['date']).strftime("%d/%m")
-            col_t.write(f"**{d_f}** : `{to_hm(row['val'])}`")
+            col_t.write(f"**{pd.to_datetime(row['date']).strftime('%d/%m')}** : `{to_hm(row['val'])}`")
             if col_b.button("🗑️", key=f"h_{row['id']}"):
                 supabase.table("heures").delete().eq("id", row['id']).execute()
                 st.rerun()
 
 with tab2:
     # Calendrier visuel
-    today_dt = datetime.now()
+    today = date.today()
     posees = pd.to_datetime(u_c['date']).dt.day.tolist() if not u_c.empty else []
-    st.write(f"📅 **{calendar.month_name[today_dt.month]} {today_dt.year}**")
     cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:15px;'>"
-    for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em; color:white;'>{d}</b>"
-    for week in calendar.monthcalendar(today_dt.year, today_dt.month):
+    for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em;'>{d}</b>"
+    for week in calendar.monthcalendar(today.year, today.month):
         for day in week:
             if day == 0: cal_html += "<div></div>"
             else:
                 bg = "#007bff" if day in posees else "rgba(255,255,255,0.05)"
-                border = "2px solid #238636" if day == today_dt.day else "none"
-                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; color:white; font-size:0.8em;'>{day}</div>"
+                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border-radius:5px; font-size:0.8em;'>{day}</div>"
     st.markdown(cal_html + "</div>", unsafe_allow_html=True)
 
     with st.expander("➕ Poser une période"):
         with st.form("c_form", clear_on_submit=True):
             sel_dates = st.date_input("Dates", value=[date.today()])
             t_v = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
-            val_c = 1.0 if t_v == "Journée" else 0.5
-            if st.form_submit_button("Confirmer", use_container_width=True):
-                g_id = str(uuid.uuid4()) # Identifiant unique pour le groupe
+            if st.form_submit_button("Confirmer"):
+                g_id = str(uuid.uuid4())
                 if isinstance(sel_dates, (list, tuple)) and len(sel_dates) > 1:
                     dates_to_add = pd.date_range(start=sel_dates[0], end=sel_dates[1], freq='D').date
                 else: dates_to_add = [sel_dates[0] if isinstance(sel_dates, (list, tuple)) else sel_dates]
                 
-                new_rows = [{"user": curr_user, "date": str(d), "type": val_c, "group_id": g_id} for d in dates_to_add if d.weekday() < 5]
-                if new_rows:
-                    supabase.table("conges").insert(new_rows).execute()
+                rows = [{"user": curr_user, "date": str(d), "type": (1.0 if t_v=="Journée" else 0.5), "group_id": g_id} for d in dates_to_add if d.weekday() < 5]
+                if rows:
+                    supabase.table("conges").insert(rows).execute()
                     st.rerun()
 
-    st.subheader("🗑️ Liste des congés")
-    if u_c.empty: st.info("Aucun congé.")
-    else:
-        # GROUPEMENT PAR GROUP_ID POUR LA SUPPRESSION
-        # On trie pour avoir les plus récents en haut
+    if not u_c.empty:
         u_c['dt_obj'] = pd.to_datetime(u_c['date'])
-        groups = u_c.sort_values('dt_obj', ascending=False).groupby('group_id', sort=False)
-        
-        for g_id, data in groups:
+        # Le groupement par group_id évite l'erreur KeyError
+        for g_id, data in u_c.sort_values('dt_obj', ascending=False).groupby('group_id', sort=False):
             col_t, col_b = st.columns([0.85, 0.15])
             start_f = data['dt_obj'].min().strftime("%d/%m")
             end_f = data['dt_obj'].max().strftime("%d/%m")
-            
             label = f"Du {start_f} au {end_f}" if len(data) > 1 else f"Le {start_f}"
-            col_t.write(f"📅 **{label}** ({data.iloc[0]['type']}j/j)")
-            
+            col_t.write(f"📅 **{label}**")
             if col_b.button("🗑️", key=f"g_{g_id}"):
-                # SUPPRESSION DE TOUT LE GROUPE D'UN COUP
                 supabase.table("conges").delete().eq("group_id", g_id).execute()
                 st.rerun()
-
-if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
-    st.session_state.authenticated = False
-    st.rerun()
