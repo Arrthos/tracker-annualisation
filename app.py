@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import calendar
 import holidays
 from supabase import create_client, Client
@@ -11,6 +11,7 @@ st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 @st.cache_resource
 def get_supabase():
+    # Utilisation des secrets Supabase configurés
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 
 supabase = get_supabase()
@@ -61,14 +62,15 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 4. CHARGEMENT DES DONNÉES ---
+# --- 4. CHARGEMENT DES DONNÉES (SUPABASE) ---
 curr_user = st.session_state.user_key
 
 def fetch_data():
+    # Requêtes sur les tables créées en SQL
     h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
     c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
     
-    # Création de DataFrames avec colonnes forcées pour éviter les KeyError
+    # Protection contre les tables vides pour éviter les KeyError
     df_h = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
     df_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type'])
     return df_h, df_c
@@ -88,6 +90,7 @@ objectif = 1652.0
 # --- 6. INTERFACE DASHBOARD ---
 st.title(f"Hello {curr_user}")
 
+# Affichage Progression
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
         <p style="margin: 0; font-weight: bold; color: white;">Progression annuelle</p>
@@ -96,6 +99,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
+# Bloc Balance
 h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
@@ -140,6 +144,7 @@ with tab2:
         u_c['dt_obj'] = pd.to_datetime(u_c['date'])
         posees = u_c[u_c['dt_obj'].dt.month == today_dt.month]['dt_obj'].dt.day.tolist()
 
+    # Calendrier Visuel
     st.write(f"📅 **{calendar.month_name[today_dt.month]} {today_dt.year}**")
     cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:15px;'>"
     for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em; color:white;'>{d}</b>"
@@ -154,37 +159,40 @@ with tab2:
 
     @st.fragment
     def section_conges():
-      with st.expander("➕ Poser un congé / une période"):
+        with st.expander("➕ Poser un congé / une période"):
             with st.form("c_form", clear_on_submit=True):
-                # Sélection de plage de dates
-                sel_dates = st.date_input("Sélectionner une date ou une période", value=[date.today()])
-                
+                # Sélection multi-dates pour les périodes
+                sel_dates = st.date_input("Date ou Période", value=[date.today()])
                 t_v = st.radio("Durée par jour", ["Journée", "Demi"], horizontal=True)
                 val_c = 1.0 if t_v == "Journée" else 0.5
                 
-                if st.form_submit_button("Confirmer l'enregistrement", use_container_width=True):
-                    # Cas 1 : Une seule date sélectionnée
-                    if len(sel_dates) == 1:
-                        dates_to_add = [sel_dates[0]]
-                    # Cas 2 : Une période (Date début et Date fin)
+                if st.form_submit_button("Confirmer", use_container_width=True):
+                    if isinstance(sel_dates, list) or isinstance(sel_dates, tuple):
+                        if len(sel_dates) == 1:
+                            dates_to_add = [sel_dates[0]]
+                        else:
+                            dates_to_add = pd.date_range(start=sel_dates[0], end=sel_dates[1], freq='D').date
                     else:
-                        start_d, end_d = sel_dates
-                        dates_to_add = pd.date_range(start=start_d, end=end_d, freq='D').date
+                        dates_to_add = [sel_dates]
                     
-                    # Préparation des données pour Supabase
-                    new_rows = []
-                    for d in dates_to_add:
-                        # On ne pose pas de congés les week-ends (optionnel mais conseillé)
-                        if d.weekday() < 5: 
-                            new_rows.append({
-                                "user": curr_user, 
-                                "date": str(d), 
-                                "type": val_c
-                            })
+                    new_rows = [{"user": curr_user, "date": str(d), "type": val_c} for d in dates_to_add if d.weekday() < 5]
                     
                     if new_rows:
                         supabase.table("conges").insert(new_rows).execute()
-                        st.success(f"{len(new_rows)} jour(s) enregistré(s) !")
                         st.rerun()
-                    else:
-                        st.warning("Aucun jour ouvré dans cette sélection.")
+
+        st.subheader("🗑️ Liste des congés")
+        if u_c.empty: st.info("Aucun congé.")
+        else:
+            for _, row in u_c.iloc[::-1].iterrows():
+                col_t, col_b = st.columns([4, 1])
+                col_t.write(f"📅 {row['date']} ({row['type']}j)")
+                if col_b.button("🗑️", key=f"c_{row['id']}"):
+                    supabase.table("conges").delete().eq("id", row['id']).execute()
+                    st.rerun()
+    section_conges()
+
+# --- 8. DÉCONNEXION ---
+if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
+    st.session_state.authenticated = False
+    st.rerun()
