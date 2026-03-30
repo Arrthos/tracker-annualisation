@@ -8,48 +8,75 @@ from supabase import create_client
 import base64
 import os
 
-# --- 1. CONFIGURATION & DESIGN ---
+# --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-st.markdown("""
+# CSS Custom pour la fusion Login <-> Image
+# Le Login devient Noir Pur, le Dashboard reste "Deep Night" (Noir Bleuté)
+design_css = """
     <style>
-    .stApp { background-color: #0E1117; color: #EAEAEA; }
+    /* 1. FOND GÉNÉRAL DE L'APP (Par défaut, Noir Pur pour le Login) */
+    .stApp { background-color: #000000 !important; color: #EAEAEA; }
     header {visibility: hidden;}
     
+    /* 2. STYLE DÉDIÉ AU DASHBOARD (Se déclenche après auth) */
+    body[data-authenticated="true"] .stApp {
+        background-color: #0E1117 !important; /* Retour au Noir Bleuté Deep Night */
+    }
+
+    /* 3. CARTES GLASSMORPHISM (Utilisées uniquement sur le Dashboard) */
     .glass-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 20px;
+        padding: 25px;
         border-radius: 20px;
         text-align: center;
         backdrop-filter: blur(10px);
         margin: 10px 0;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     }
 
+    /* 4. TYPOGRAPHIE ET COULEURS (Sans Jaune) */
     .balance-val {
         font-size: 5rem;
         font-weight: 800;
         letter-spacing: -2px;
         margin: 5px 0;
     }
-    .pos { color: #2ECC71; }
-    .neg { color: #E74C3C; }
+    .pos { color: #2ECC71; } /* Vert dynamique si positif */
+    .neg { color: #E74C3C; } /* Rouge dynamique si negatif */
 
-    .stProgress > div > div > div > div {
-        background-color: #3498DB;
-        height: 8px;
-    }
-
-    .stMarkdown, p, small { color: #EAEAEA !important; }
+    .stMarkdown, p, small, label { color: #EAEAEA !important; }
     .sub-text { color: #888 !important; font-size: 0.8rem; }
     
-    .login-logo {
+    /* 5. ÉLÉMENTS D'INTERFACE */
+    .stProgress > div > div > div > div {
+        background-color: #3498DB; /* Progress Bar Bleue */
+        height: 8px;
+    }
+    .stButton>button {
+        border-radius: 12px !important;
+        background-color: #FDFDFD !important; /* Boutons Blancs discrets */
+        color: #0E1117 !important;
+        font-weight: 700 !important;
+        border: none !important;
+    }
+
+    /* 6. STYLE SPÉCIFIQUE PAGE LOGIN */
+    .login-logo-container {
         display: flex;
         justify-content: center;
-        margin-bottom: 10px;
+        margin-top: 50px; /* Espace en haut */
+        margin-bottom: 20px;
+    }
+    /* Centre le formulaire Streamlit et le colle au logo */
+    [data-testid="stForm"] {
+        margin-top: -30px; 
+        border: none !important; /* Supprime la bordure grise du formulaire */
     }
     </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(design_css, unsafe_allow_html=True)
 
 # --- 2. FONCTIONS LOGIQUES ---
 @st.cache_resource
@@ -87,32 +114,41 @@ def calculate_metrics(df_conges, solidarity_day):
         df['h_theo'] = np.maximum(0, df['h_theo'] * (1 - df['c_val']))
     return df['h_theo'].sum()
 
-# --- 3. AUTHENTIFICATION ET IMAGE ---
+def load_and_encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode()
+
+# --- 3. AUTHENTIFICATION & FUSION LOGO-FOND ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    # Tentative d'affichage de l'image
-    img_path = "image_11.png"
+    # 1. Affichage du Logo (image_21.png) sur fond Noir Pur
+    img_path = "image_21.png"
     if os.path.exists(img_path):
-        with open(img_path, "rb") as f:
-            data = f.read()
-            encoded = base64.b64encode(data).decode()
-        st.markdown(f'<div class="login-logo"><img src="data:image/png;base64,{encoded}" width="180"></div>', unsafe_allow_html=True)
+        encoded_img = load_and_encode_image(img_path)
+        # Insertion centrée de l'image. width=220 pour un look moderne
+        st.markdown(
+            f'<div class="login-logo-container"><img src="data:image/png;base64,{encoded_img}" alt="Work Tracker Logo" width="220"></div>', 
+            unsafe_allow_html=True
+        )
     else:
-        # Message d'aide si l'image est manquante
-        st.info("💡 L'image 'image_11.png' n'a pas été trouvée à la racine du projet.")
+        st.warning(f"Image '{img_path}' introuvable à la racine.")
+        st.markdown("<h2 style='text-align:center; color:#EAEAEA;'>Work Tracker Pro</h2>", unsafe_allow_html=True)
         
-    with st.form("login"):
-        st.markdown("<h3 style='text-align:center;'>Work Tracker</h3>", unsafe_allow_html=True)
+    # 2. Formulaire de connexion épuré (sans bordures Streamlit)
+    with st.form("login", clear_on_submit=False):
+        st.markdown("<h3 style='text-align:center; color:#EAEAEA;'>Connexion</h3>", unsafe_allow_html=True)
         u = st.text_input("Identifiant")
         p = st.text_input("Mot de passe", type="password")
         if st.form_submit_button("ENTRER"):
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated = True
                 st.session_state.user_key = u
+                # Astuce pour changer la couleur de fond du dashboard après auth
+                st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
                 st.rerun()
             else:
                 st.error("Identifiants incorrects")
@@ -132,36 +168,36 @@ h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
 delta = USERS[curr_user]["base_sup"] + h_sup_total
 fait = du + delta
 
-# --- 6. INTERFACE DASHBOARD ---
+# --- 6. INTERFACE DASHBOARD (Noir Bleuté Deep Night) ---
 
-# Header
-st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
+# Header "Bonjour, Julien"
+st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0; color:#EAEAEA;'>{curr_user}</h2>", unsafe_allow_html=True)
 
-# Barre de progression
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small><b>{int(fait)}h</b> / 1652h</small></p>", unsafe_allow_html=True)
+# Barre de progression en haut
+st.markdown(f"<p style='text-align:center; margin-bottom:5px; color:#EAEAEA;'><small><b>{int(fait)}h</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# Balance Dynamique (Vert/Rouge)
-status_color = "pos" if delta >= 0 else "neg"
+# Carte Balance Dynamique (Vert/Rouge) sur fond Glassmorphism
+status_class = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
-        <small class="sub-text">BALANCE ACTUELLE</small>
-        <div class="balance-val {status_color}">{to_hm(delta)}</div>
+        <small class="sub-text">BALANCE HEURES SUP.</small>
+        <div class="balance-val {status_class}">{to_hm(delta)}</div>
     </div>
 """, unsafe_allow_html=True)
 
 # Dû et Fait sur la même ligne
 col1, col2 = st.columns(2)
-col1.markdown(f"<p style='text-align:left;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
-col2.markdown(f"<p style='text-align:right;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
+col1.markdown(f"<p style='text-align:left; color:#EAEAEA;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
+col2.markdown(f"<p style='text-align:right; color:#EAEAEA;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 7. ONGLETS ---
-tab1, tab2 = st.tabs(["⚡ HEURES", "🌴 CONGÉS"])
+# --- 7. ONGLETS DE SAISIE ---
+tab1, tab2 = st.tabs(["⚡ SAISIE HEURES", "🌴 SAISIE CONGÉS"])
 
 with tab1:
-    with st.expander("➕ Enregistrer des heures"):
+    with st.expander("➕ Enregistrer des heures supplémentaires"):
         with st.form("h_form", clear_on_submit=True):
             typ = st.radio("Sens", ["Plus (+)", "Moins (-)"], horizontal=True)
             d = st.date_input("Date", date.today())
@@ -173,15 +209,16 @@ with tab1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val_final}).execute()
                 st.rerun()
     
+    # Historique Heures épuré
     for _, row in u_a.iloc[::-1].iterrows():
         c_txt, c_del = st.columns([0.85, 0.15])
-        c_txt.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+        c_txt.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px; color:#EAEAEA;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
         if c_del.button("🗑️", key=f"h_{row['id']}"):
             supabase.table("heures").delete().eq("id", row['id']).execute()
             st.rerun()
 
 with tab2:
-    mode_p = st.toggle("Mode Période", value=False)
+    mode_p = st.toggle("Activer mode Période", value=False)
     if not mode_p:
         d_u = st.date_input("Choisir le jour", date.today())
         half = st.checkbox("Demi-journée")
@@ -202,14 +239,15 @@ with tab2:
                     supabase.table("conges").insert(rows).execute()
                     st.rerun()
 
+    # Historique Congés épuré
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
             cx, cy = st.columns([0.85, 0.15])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
-            if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
-            cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2 journée)"
+            cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px; color:#EAEAEA;'>🌴 {lbl}</div>", unsafe_allow_html=True)
             if cy.button("🗑️", key=f"g_{gid}"):
                 supabase.table("conges").delete().eq("group_id", gid).execute()
                 st.rerun()
