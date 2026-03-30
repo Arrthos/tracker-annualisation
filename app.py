@@ -142,7 +142,7 @@ if not st.session_state.authenticated:
         st.markdown(f'<div class="login-logo-container"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
-        if st.form_submit_button("ENTRER"):
+        if st.form_submit_button("Connexion"):
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
@@ -181,7 +181,7 @@ fait = du + delta
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 
 # Progression Annuelle épurée (à gauche)
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Fait : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
 # Carte Balance
