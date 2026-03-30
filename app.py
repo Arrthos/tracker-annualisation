@@ -5,8 +5,9 @@ from datetime import datetime, date, timedelta
 import holidays
 import uuid
 from supabase import create_client
+import base64
 
-# --- 1. CONFIG & DESIGN ÉPURÉ ---
+# --- 1. CONFIGURATION & DESIGN ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 st.markdown("""
@@ -14,7 +15,7 @@ st.markdown("""
     .stApp { background-color: #0E1117; color: #EAEAEA; }
     header {visibility: hidden;}
     
-    /* Carte de balance */
+    /* Carte de balance Glassmorphism */
     .glass-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -31,28 +32,37 @@ st.markdown("""
         letter-spacing: -2px;
         margin: 5px 0;
     }
-    .pos { color: #2ECC71; }
-    .neg { color: #E74C3C; }
+    .pos { color: #2ECC71; } /* Vert si positif */
+    .neg { color: #E74C3C; } /* Rouge si negatif */
 
-    /* Progress bar custom */
+    /* Progress bar */
     .stProgress > div > div > div > div {
         background-color: #3498DB;
         height: 8px;
     }
 
-    /* Clean text */
     .stMarkdown, p, small { color: #EAEAEA !important; }
     .sub-text { color: #888 !important; font-size: 0.8rem; }
+    
+    /* Centrage de l'image de login */
+    .login-logo {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIQUE ---
+# --- 2. FONCTIONS LOGIQUES ---
 @st.cache_resource
-def get_supabase(): return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+def get_supabase(): 
+    return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+
 supabase = get_supabase()
 
 @st.cache_data(ttl=3600)
-def get_fr_holidays(years): return holidays.France(years=years)
+def get_fr_holidays(years): 
+    return holidays.France(years=years)
 
 def to_hm(decimal_hours):
     abs_h = abs(decimal_hours)
@@ -79,78 +89,103 @@ def calculate_metrics(df_conges, solidarity_day):
         df['h_theo'] = np.maximum(0, df['h_theo'] * (1 - df['c_val']))
     return df['h_theo'].sum()
 
-# --- 3. AUTH & DATA ---
+def load_image(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+# --- 3. AUTHENTIFICATION ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
+
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
 if not st.session_state.authenticated:
+    # Affichage Logo image_11.png
+    try:
+        img_base64 = load_image("image_11.png")
+        st.markdown(f'<div class="login-logo"><img src="data:image/png;base64,{img_base64}" width="150"></div>', unsafe_allow_html=True)
+    except:
+        st.write("---")
+        
     with st.form("login"):
-        u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
-        if st.form_submit_button("ENTRER"):
+        st.markdown("<h3 style='text-align:center;'>Connexion</h3>", unsafe_allow_html=True)
+        u = st.text_input("Identifiant")
+        p = st.text_input("Mot de passe", type="password")
+        if st.form_submit_button("SE CONNECTER"):
             if u in USERS and USERS[u]["password"] == p:
-                st.session_state.authenticated, st.session_state.user_key = True, u
+                st.session_state.authenticated = True
+                st.session_state.user_key = u
                 st.rerun()
+            else:
+                st.error("Identifiants incorrects")
     st.stop()
 
+# --- 4. RÉCUPÉRATION DATA ---
 curr_user = st.session_state.user_key
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
-# --- 4. CALCULS ---
+# --- 5. CALCULS DASHBOARD ---
 sol_date = date(2026, 6, 1)
 du = calculate_metrics(u_c.copy(), sol_date)
-delta = USERS[curr_user]["base_sup"] + (u_a['val'].astype(float).sum() if not u_a.empty else 0)
+h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
+delta = USERS[curr_user]["base_sup"] + h_sup_total
 fait = du + delta
 
-# --- 5. INTERFACE DASHBOARD ---
+# --- 6. INTERFACE UTILISATEUR ---
 
-# A. Header "Bonjour, Julien"
+# Header
 st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 
-# B. Progress Bar (Prioritaire)
+# Barre de progression en haut
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small><b>{int(fait)}h</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# C. Balance Card (Vert/Rouge)
-status_class = "pos" if delta >= 0 else "neg"
+# Carte Balance (Vert/Rouge)
+status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
-        <small style="color:#888; letter-spacing:1px;">BALANCE ACTUELLE</small>
-        <div class="balance-val {status_class}">{to_hm(delta)}</div>
+        <small class="sub-text">BALANCE ACTUELLE</small>
+        <div class="balance-val {status_color}">{to_hm(delta)}</div>
     </div>
 """, unsafe_allow_html=True)
 
-# D. Dû et Fait sur la même ligne
-c1, c2 = st.columns(2)
-c1.markdown(f"<p style='text-align:left;'><small style='color:#888;'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
-c2.markdown(f"<p style='text-align:right;'><small style='color:#888;'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
+# Dû et Fait sur la même ligne
+col1, col2 = st.columns(2)
+col1.markdown(f"<p style='text-align:left;'><small class='sub-text'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
+col2.markdown(f"<p style='text-align:right;'><small class='sub-text'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 6. TABS SAISIE ---
+# --- 7. ONGLETS ---
 tab1, tab2 = st.tabs(["⚡ HEURES", "🌴 CONGÉS"])
 
 with tab1:
     with st.expander("➕ Enregistrer des heures"):
-        with st.form("h_f", clear_on_submit=True):
+        with st.form("h_form", clear_on_submit=True):
             typ = st.radio("Sens", ["Plus (+)", "Moins (-)"], horizontal=True)
             d = st.date_input("Date", date.today())
-            h, m = st.columns(2)
-            hv, mv = h.number_input("H", 0, 12, 0), m.number_input("M", 0, 59, 0)
+            h_col, m_col = st.columns(2)
+            hv = h_col.number_input("Heures", 0, 12, 0)
+            mv = m_col.number_input("Minutes", 0, 59, 0)
             if st.form_submit_button("VALIDER"):
-                supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": (hv + mv/60) * (-1 if "Moins" in typ else 1)}).execute()
+                val_final = (hv + mv/60) * (-1 if "Moins" in typ else 1)
+                supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val_final}).execute()
                 st.rerun()
     
+    # Historique
     for _, row in u_a.iloc[::-1].iterrows():
-        cx, cy = st.columns([0.85, 0.15])
-        cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-        if cy.button("🗑️", key=f"h_{row['id']}"):
-            supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
+        c_txt, c_del = st.columns([0.85, 0.15])
+        c_txt.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+        if c_del.button("🗑️", key=f"h_{row['id']}"):
+            supabase.table("heures").delete().eq("id", row['id']).execute()
+            st.rerun()
 
 with tab2:
-    is_p = st.toggle("Mode Période", value=False)
-    if not is_p:
+    mode_p = st.toggle("Mode Période", value=False)
+    if not mode_p:
         d_u = st.date_input("Choisir le jour", date.today())
         half = st.checkbox("Demi-journée")
         if st.button("ENREGISTRER JOUR"):
@@ -158,14 +193,17 @@ with tab2:
                 supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
                 st.rerun()
     else:
-        c1, c2 = st.columns(2)
-        ds, de = c1.date_input("Du", date.today()), c2.date_input("Au", date.today() + timedelta(days=1))
+        c_start, c_end = st.columns(2)
+        ds = c_start.date_input("Du", date.today())
+        de = c_end.date_input("Au", date.today() + timedelta(days=1))
         if st.button("ENREGISTRER PÉRIODE"):
             if ds <= de:
                 gid = str(uuid.uuid4())
                 days = pd.date_range(ds, de, freq='D').date
                 rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
-                if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
+                if rows:
+                    supabase.table("conges").insert(rows).execute()
+                    st.rerun()
 
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
@@ -173,6 +211,8 @@ with tab2:
             cx, cy = st.columns([0.85, 0.15])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
+            if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
             cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
             if cy.button("🗑️", key=f"g_{gid}"):
-                supabase.table("conges").delete().eq("group_id", gid).execute(); st.rerun()
+                supabase.table("conges").delete().eq("group_id", gid).execute()
+                st.rerun()
