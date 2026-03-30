@@ -126,17 +126,42 @@ def draw_calendar(df_c):
         df_c['dt'] = pd.to_datetime(df_c['date'], dayfirst=True)
         posees = df_c[(df_c['dt'].dt.month == today.month) & (df_c['dt'].dt.year == today.year)]['dt'].dt.day.tolist()
 
-    cols = st.columns(7)
-    for i, d in enumerate(["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]): cols[i].caption(d)
+    # Construction du calendrier en HTML/CSS Grid
+    days_header = "".join([f'<div style="text-align:center; font-weight:bold; font-size:0.8em; opacity:0.6;">{d}</div>' for d in ["L", "M", "M", "J", "V", "S", "D"]])
+    
+    cal_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px;">
+        {days_header}
+    """
     
     for week in cal:
-        cols = st.columns(7)
-        for i, day in enumerate(week):
-            if day == 0: cols[i].write(" ")
-            elif day in posees: cols[i].markdown(f"<div style='background:#007bff; border-radius:5px; text-align:center;'>{day} 🔵</div>", unsafe_allow_html=True)
-            elif day == today.day: cols[i].markdown(f"<div style='border:1px solid #238636; border-radius:5px; text-align:center;'>{day} 📍</div>", unsafe_allow_html=True)
-            else: cols[i].markdown(f"<div style='text-align:center;'>{day}</div>", unsafe_allow_html=True)
-
+        for day in week:
+            if day == 0:
+                cal_html += '<div></div>'
+            else:
+                # Style par défaut
+                bg = "transparent"
+                border = "none"
+                text_color = "inherit"
+                content = str(day)
+                
+                # Style si jour de congé
+                if day in posees:
+                    bg = "#007bff"
+                    content = f"{day}🔵"
+                # Style si aujourd'hui
+                elif day == today.day:
+                    border = "1px solid #238636"
+                    content = f"{day}📍"
+                
+                cal_html += f"""
+                <div style="text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; font-size:0.9em;">
+                    {content}
+                </div>
+                """
+    
+    cal_html += "</div>"
+    st.markdown(cal_html, unsafe_allow_html=True)
 # --- 7. INTERFACE PRINCIPALE ---
 with st.sidebar:
     st.markdown(f"### 👤 {u_info['full_name']}")
