@@ -5,99 +5,44 @@ from datetime import datetime, date, timedelta
 import calendar
 import holidays
 
-# --- 1. CONFIGURATION ---
+# --- 1. CONFIGURATION & PERMANENCE ---
 USERS = {
     "Julien": {"password": "123", "base_sup": 20.5, "full_name": "Julien", "role": "admin"}
 }
 
-st.set_page_config(page_title="Mon Annualisation", page_icon="📊", layout="centered")
+st.set_page_config(page_title="Work Tracker Pro", page_icon="📊", layout="centered")
 
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-if 'theme' not in st.session_state: st.session_state.theme = 'dark'
+# Initialisation des variables de session
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'user_key' not in st.session_state:
+    st.session_state.user_key = None
 
-# --- 2. FONCTION CALENDRIER MOBILE (HTML FIX) ---
-def draw_mobile_calendar(df_c):
-    today = datetime.now()
-    cal = calendar.monthcalendar(today.year, today.month)
-    month_name = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"][today.month-1]
-    
-    posees = []
-    if not df_c.empty:
-        df_c['dt'] = pd.to_datetime(df_c['date'], dayfirst=True)
-        posees = df_c[(df_c['dt'].dt.month == today.month) & (df_c['dt'].dt.year == today.year)]['dt'].dt.day.tolist()
+# --- 2. FONCTIONS OPTIMISÉES (CACHE) ---
 
-    # Style CSS injecté pour forcer la grille sur mobile
-    cal_html = f"""
-    <style>
-        .cal-grid {{
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 4px;
-            margin: 10px 0;
-            width: 100%;
-        }}
-        .cal-day {{
-            text-align: center;
-            padding: 10px 0;
-            background: rgba(255,255,255,0.05);
-            border-radius: 5px;
-            font-size: 0.8em;
-        }}
-        .cal-header {{ font-weight: bold; opacity: 0.6; background: none; }}
-        .cal-today {{ border: 1px solid #238636; }}
-        .cal-conge {{ background: #007bff !important; color: white !important; font-weight: bold; }}
-    </style>
-    <h4 style='text-align:center;'>{month_name} {today.year}</h4>
-    <div class='cal-grid'>
-        <div class='cal-day cal-header'>L</div><div class='cal-day cal-header'>M</div>
-        <div class='cal-day cal-header'>M</div><div class='cal-day cal-header'>J</div>
-        <div class='cal-day cal-header'>V</div><div class='cal-day cal-header'>S</div>
-        <div class='cal-day cal-header'>D</div>
-    """
-    
-    for week in cal:
-        for day in week:
-            if day == 0:
-                cal_html += "<div></div>"
-            else:
-                classes = "cal-day"
-                indicator = ""
-                if day == today.day: classes += " cal-today"
-                if day in posees: 
-                    classes += " cal-conge"
-                    indicator = "🔵"
-                cal_html += f"<div class='{classes}'>{day}{indicator}</div>"
-    
-    cal_html += "</div>"
-    st.markdown(cal_html, unsafe_allow_html=True)
+@st.cache_data(ttl=600)  # Garde en mémoire les jours fériés pendant 10 min
+def get_holidays(year):
+    return holidays.France(years=[year, year + 1])
 
-# --- 3. LOGIN ---
-if not st.session_state.authenticated:
-    st.title("🔐 Connexion")
-    u_i = st.text_input("Identifiant")
-    p_i = st.text_input("Mot de passe", type="password")
-    if st.button("Se connecter", use_container_width=True):
-        if u_i in USERS and USERS[u_i]["password"] == p_i:
-            st.session_state.authenticated, st.session_state.user_key = True, u_i
-            st.rerun()
-    st.stop()
-
-curr_user = st.session_state.user_key
-u_info = USERS[curr_user]
-
-# --- 4. DATA & CALCULS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-def get_stats(uid, df_a, df_c):
+def get_stats_optimized(uid, df_a, df_c):
+    """Calcul optimisé pour réduire la charge CPU"""
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
     start = datetime(sy, 9, 1)
-    fr_h = holidays.France(years=[sy, sy+1])
-    d_conges = {pd.to_datetime(r['date'], dayfirst=True).date(): float(r['type']) for _, r in df_c[df_c['user']==uid].iterrows()} if 'user' in df_c.columns else {}
+    fr_h = get_holidays(sy)
+    
+    # Filtrage rapide
+    u_c = df_c[df_c['user'] == uid] if 'user' in df_c.columns else pd.DataFrame()
+    u_a = df_a[df_a['user'] == uid] if 'user' in df_a.columns else pd.DataFrame()
+    
+    d_conges = {pd.to_datetime(r['date'], dayfirst=True).date(): float(r['type']) for _, r in u_c.iterrows()}
     
     theo = 0
     curr = start
-    while curr <= now.replace(hour=23, minute=59):
+    end_calc = now.replace(hour=23, minute=59)
+    
+    # Boucle de calcul optimisée
+    while curr <= end_calc:
         d = curr.date()
         if curr.weekday() < 5:
             h_j = 7.5 if curr.weekday() <= 1 else 7.0
@@ -105,74 +50,86 @@ def get_stats(uid, df_a, df_c):
                 theo += h_j * (1 - d_conges.get(d, 0))
         curr += timedelta(days=1)
     
-    val_ajust = df_a[df_a['user']==uid]['val'].sum() if 'user' in df_a.columns else 0
+    val_ajust = u_a['val'].sum() if not u_a.empty else 0
     return USERS[uid]["base_sup"] + val_ajust, theo
 
-df_a = conn.read(worksheet="Feuille 1", ttl=0).dropna(how='all')
-df_c = conn.read(worksheet="Conges", ttl=0).dropna(how='all')
-my_delta, my_theo = get_stats(curr_user, df_a, df_c)
+# --- 3. LOGIQUE DE CONNEXION ---
+if not st.session_state.authenticated:
+    st.markdown("<h2 style='text-align: center;'>🔐 Accès Work Tracker</h2>", unsafe_allow_html=True)
+    with st.form("login_form"):
+        u_i = st.text_input("Identifiant")
+        p_i = st.text_input("Mot de passe", type="password")
+        if st.form_submit_button("Se connecter", use_container_width=True):
+            if u_i in USERS and USERS[u_i]["password"] == p_i:
+                st.session_state.authenticated = True
+                st.session_state.user_key = u_i
+                st.rerun()
+            else:
+                st.error("Identifiants erronés")
+    st.stop()
 
-# --- 5. INTERFACE ---
-st.title("Mon Annualisation")
+# --- 4. RÉCUPÉRATION DES DONNÉES (FLUIDE) ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Carte Balance
-color = "#238636" if my_delta >= 0 else "#da3633"
+# Lecture avec un TTL court pour l'interactivité, mais long assez pour la fluidité
+df_a = conn.read(worksheet="Feuille 1", ttl="1m").dropna(how='all')
+df_c = conn.read(worksheet="Conges", ttl="1m").dropna(how='all')
+
+curr_user = st.session_state.user_key
+my_delta, my_theo = get_stats_optimized(curr_user, df_a, df_c)
+
+# --- 5. INTERFACE ET CALENDRIER (HTML GRID) ---
+st.title(f"Salut, {USERS[curr_user]['full_name']} 👋")
+
+# Affichage Balance (Simplifié pour mobile)
 h, m = int(abs(my_delta)), int((abs(my_delta) - int(abs(my_delta))) * 60)
+color = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
-    <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:15px; text-align:center; border:1px solid rgba(255,255,255,0.1);">
-        <p style="opacity:0.6; margin:0;">Balance actuelle</p>
-        <h1 style="color:{color}; font-size:3.5em; margin:10px 0;">{'+' if my_delta >= 0 else '-'}{h}h{m:02d}</h1>
+    <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; border-left: 5px solid {color};">
+        <h1 style="color:{color}; margin:0; font-size:3em;">{'+' if my_delta >= 0 else '-'}{h}h{m:02d}</h1>
+        <p style="opacity:0.7; margin:0;">Balance Annualisation</p>
     </div>
 """, unsafe_allow_html=True)
 
-# Admin View
-if u_info['role'] == "admin":
-    with st.expander("📊 Tableau de bord Equipe (Admin)"):
-        for u in USERS:
-            d, _ = get_stats(u, df_a, df_c)
-            st.write(f"**{u}** : {d:+.2f}h")
+st.write("") # Espacement
 
-st.write("---")
-t1, t2 = st.tabs(["⚡ Réguler", "🌴 Congés"])
+t1, t2 = st.tabs(["⚡ Heures", "🌴 Repos"])
 
 with t1:
-    with st.form("f1", clear_on_submit=True):
-        typ = st.selectbox("Type", ["Plus (+)", "Moins (-)"])
-        dat = st.date_input("Date", value=date.today())
-        hrs = st.number_input("Heures", 0, 12, 0)
-        mnt = st.number_input("Minutes", 0, 59, 0)
-        if st.form_submit_button("Enregistrer", use_container_width=True):
-            v = (hrs + mnt/60) * (-1 if "Moins" in typ else 1)
-            new = pd.DataFrame([{"user": curr_user, "date": dat.strftime("%d/%m/%Y"), "val": v}])
-            conn.update(worksheet="Feuille 1", data=pd.concat([df_a, new], ignore_index=True)[['user', 'date', 'val']])
-            st.rerun()
-    
-    # Historique Heures
-    u_h = df_a[df_a['user'] == curr_user].iloc[::-1].head(3)
-    for i, r in u_h.iterrows():
-        c_txt, c_del = st.columns([4, 1])
-        c_txt.write(f"{r['date']} : {r['val']:+.2f}h")
-        if c_del.button("🗑️", key=f"del_h_{i}"):
-            conn.update(worksheet="Feuille 1", data=df_a.drop(i)[['user', 'date', 'val']])
-            st.rerun()
+    with st.expander("➕ Enregistrer une régulation"):
+        with st.form("h_form", clear_on_submit=True):
+            typ = st.radio("Action", ["Plus (+)", "Moins (-)"], horizontal=True)
+            dat = st.date_input("Date", value=date.today())
+            c_h, c_m = st.columns(2)
+            hrs = c_h.number_input("H", 0, 12, 0)
+            mnt = c_m.number_input("min", 0, 59, 0)
+            if st.form_submit_button("Valider"):
+                v = (hrs + mnt/60) * (-1 if "Moins" in typ else 1)
+                new = pd.DataFrame([{"user": curr_user, "date": dat.strftime("%d/%m/%Y"), "val": v}])
+                conn.update(worksheet="Feuille 1", data=pd.concat([df_a, new], ignore_index=True)[['user', 'date', 'val']])
+                st.cache_data.clear() # Force le rafraîchissement
+                st.rerun()
 
 with t2:
-    draw_mobile_calendar(df_c[df_c['user']==curr_user] if 'user' in df_c.columns else pd.DataFrame())
-    
-    with st.form("f2", clear_on_submit=True):
-        d_c = st.date_input("Date du congé", value=date.today())
-        t_c = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
-        if st.form_submit_button("Poser le congé", use_container_width=True):
-            v_c = 1.0 if t_c == "Journée" else 0.5
-            new_c = pd.DataFrame([{"user": curr_user, "date": d_c.strftime("%d/%m/%Y"), "type": v_c}])
-            conn.update(worksheet="Conges", data=pd.concat([df_c, new_c], ignore_index=True)[['user', 'date', 'type']])
-            st.rerun()
+    # Calendrier intégré avec grille CSS
+    today = datetime.now()
+    cal = calendar.monthcalendar(today.year, today.month)
+    u_c_list = df_c[df_c['user'] == curr_user]
+    posees = pd.to_datetime(u_c_list['date'], dayfirst=True).dt.day.tolist() if not u_c_list.empty else []
 
-    # Historique Congés
-    u_c = df_c[df_c['user'] == curr_user].iloc[::-1].head(3)
-    for i, r in u_c.iterrows():
-        c_txt, c_del = st.columns([4, 1])
-        c_txt.write(f"📅 {r['date']} ({r['type']})")
-        if c_del.button("🗑️", key=f"del_c_{i}"):
-            conn.update(worksheet="Conges", data=df_c.drop(i)[['user', 'date', 'type']])
-            st.rerun()
+    cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:3px;'>"
+    for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em;'>{d}</b>"
+    for week in cal:
+        for day in week:
+            if day == 0: cal_html += "<div></div>"
+            else:
+                bg = "#007bff" if day in posees else "rgba(255,255,255,0.05)"
+                border = "1px solid #238636" if day == today.day else "none"
+                cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:4px; font-size:0.8em;'>{day}</div>"
+    cal_html += "</div>"
+    st.markdown(cal_html, unsafe_allow_html=True)
+
+# Déconnexion en bas de page
+if st.sidebar.button("🚪 Déconnexion"):
+    st.session_state.authenticated = False
+    st.rerun()
