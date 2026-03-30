@@ -80,7 +80,7 @@ def calculate_metrics(df_conges, solidarity_day):
     return df['h_theo'].sum()
 
 # --- 3. AUTH & DATA ---
-USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if not st.session_state.authenticated:
     with st.form("login"):
