@@ -9,7 +9,7 @@ import base64
 import os
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Work Tracker Pro", layout="centered")
+st.set_page_config(page_title="Goulag et Rota", layout="centered")
 
 # CSS Custom pour la fusion Login <-> Image
 # Le Login devient Noir Pur, le Dashboard reste "Deep Night" (Noir Bleuté)
@@ -126,7 +126,7 @@ if 'authenticated' not in st.session_state:
 
 if not st.session_state.authenticated:
     # 1. Affichage du Logo (image_21.png) sur fond Noir Pur
-    img_path = "image_21.png"
+    img_path = "image_11.png"
     if os.path.exists(img_path):
         encoded_img = load_and_encode_image(img_path)
         # Insertion centrée de l'image. width=220 pour un look moderne
