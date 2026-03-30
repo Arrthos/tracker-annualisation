@@ -6,6 +6,7 @@ import holidays
 import uuid
 from supabase import create_client
 import base64
+import os
 
 # --- 1. CONFIGURATION & DESIGN ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
@@ -15,7 +16,6 @@ st.markdown("""
     .stApp { background-color: #0E1117; color: #EAEAEA; }
     header {visibility: hidden;}
     
-    /* Carte de balance Glassmorphism */
     .glass-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -32,10 +32,9 @@ st.markdown("""
         letter-spacing: -2px;
         margin: 5px 0;
     }
-    .pos { color: #2ECC71; } /* Vert si positif */
-    .neg { color: #E74C3C; } /* Rouge si negatif */
+    .pos { color: #2ECC71; }
+    .neg { color: #E74C3C; }
 
-    /* Progress bar */
     .stProgress > div > div > div > div {
         background-color: #3498DB;
         height: 8px;
@@ -44,11 +43,10 @@ st.markdown("""
     .stMarkdown, p, small { color: #EAEAEA !important; }
     .sub-text { color: #888 !important; font-size: 0.8rem; }
     
-    /* Centrage de l'image de login */
     .login-logo {
         display: flex;
         justify-content: center;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -89,29 +87,29 @@ def calculate_metrics(df_conges, solidarity_day):
         df['h_theo'] = np.maximum(0, df['h_theo'] * (1 - df['c_val']))
     return df['h_theo'].sum()
 
-def load_image(path):
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-# --- 3. AUTHENTIFICATION ---
+# --- 3. AUTHENTIFICATION ET IMAGE ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    # Affichage Logo image_11.png
-    try:
-        img_base64 = load_image("image_11.png")
-        st.markdown(f'<div class="login-logo"><img src="data:image/png;base64,{img_base64}" width="150"></div>', unsafe_allow_html=True)
-    except:
-        st.write("---")
+    # Tentative d'affichage de l'image
+    img_path = "image_11.png"
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            data = f.read()
+            encoded = base64.b64encode(data).decode()
+        st.markdown(f'<div class="login-logo"><img src="data:image/png;base64,{encoded}" width="180"></div>', unsafe_allow_html=True)
+    else:
+        # Message d'aide si l'image est manquante
+        st.info("💡 L'image 'image_11.png' n'a pas été trouvée à la racine du projet.")
         
     with st.form("login"):
-        st.markdown("<h3 style='text-align:center;'>Connexion</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align:center;'>Work Tracker</h3>", unsafe_allow_html=True)
         u = st.text_input("Identifiant")
         p = st.text_input("Mot de passe", type="password")
-        if st.form_submit_button("SE CONNECTER"):
+        if st.form_submit_button("ENTRER"):
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated = True
                 st.session_state.user_key = u
@@ -134,16 +132,16 @@ h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
 delta = USERS[curr_user]["base_sup"] + h_sup_total
 fait = du + delta
 
-# --- 6. INTERFACE UTILISATEUR ---
+# --- 6. INTERFACE DASHBOARD ---
 
 # Header
 st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 
-# Barre de progression en haut
+# Barre de progression
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small><b>{int(fait)}h</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# Carte Balance (Vert/Rouge)
+# Balance Dynamique (Vert/Rouge)
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
@@ -175,7 +173,6 @@ with tab1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val_final}).execute()
                 st.rerun()
     
-    # Historique
     for _, row in u_a.iloc[::-1].iterrows():
         c_txt, c_del = st.columns([0.85, 0.15])
         c_txt.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
