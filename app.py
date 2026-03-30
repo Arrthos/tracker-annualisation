@@ -4,40 +4,29 @@ import numpy as np
 from datetime import datetime, date
 import calendar
 import holidays
+import uuid  # Pour grouper les congés
 from supabase import create_client, Client
 
-# --- 1. CONFIGURATION ---
+# --- 1. CONFIGURATION & CSS ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
-# --- CSS DE FORCE BRUTE (POUR MOBILE) ---
-# Ce bloc force verticalement et horizontalement l'alignement
-# et réduit les marges autour des boutons dans les historiques.
 st.markdown("""
     <style>
-    /* Force l'alignement horizontal et centré verticalement pour les historiques */
     div[data-testid="stHorizontalBlock"] {
         display: flex;
-        flex-direction: row !important; /* Force la ligne sur mobile */
+        flex-direction: row !important;
         align-items: center;
-        margin-bottom: -15px !important; /* Réduit l'espace entre les lignes */
+        margin-bottom: -12px !important;
     }
-    
-    /* Supprime l'espace inutile au-dessus des corbeilles */
     .stButton > button {
         margin-top: 0px !important;
-        padding: 5px 10px !important;
-    }
-    
-    /* Réduit l'espace avant le texte pour le coller au bord */
-    .stMarkdown div p {
-        margin-bottom: 0px !important;
+        padding: 2px 8px !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
 def get_supabase():
-    # Utilisation des secrets
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 
 supabase = get_supabase()
@@ -47,7 +36,6 @@ def get_fr_holidays(years):
     return holidays.France(years=years)
 
 def to_hm(decimal_hours):
-    """Convertit des heures décimales en format string XhXX"""
     abs_h = abs(decimal_hours)
     h = int(abs_h)
     m = int(round((abs_h - h) * 60))
@@ -60,35 +48,27 @@ def calculate_due_fast(df_conges, solidarity_day):
     now = datetime.now()
     sy = now.year if now.month >= 9 else now.year - 1
     start = datetime(sy, 9, 1)
-    
     dr = pd.date_range(start=start, end=now, freq='D')
     df_dates = pd.DataFrame({'date': dr})
     df_dates['weekday'] = df_dates['date'].dt.weekday
     df_dates = df_dates[df_dates['weekday'] < 5].copy()
-    
     df_dates['h_theo'] = np.where(df_dates['weekday'] <= 1, 7.5, 7.0)
-    
     fr_h = get_fr_holidays([sy, sy+1])
     df_dates['is_holiday'] = df_dates['date'].dt.date.apply(lambda x: x in fr_h and x != solidarity_day)
     df_dates.loc[df_dates['is_holiday'], 'h_theo'] = 0
-    
-    if not df_conges.empty and 'date' in df_conges.columns:
+    if not df_conges.empty:
         df_conges['dt_temp'] = pd.to_datetime(df_conges['date']).dt.date
         conges_map = df_conges.dropna(subset=['dt_temp']).set_index('dt_temp')['type'].to_dict()
         df_dates['conge_val'] = df_dates['date'].dt.date.map(conges_map).fillna(0)
         df_dates['h_theo'] *= (1 - df_dates['conge_val'])
-        
     return df_dates['h_theo'].sum()
 
 # --- 3. AUTHENTIFICATION ---
-# Mots de passe sérieux pour le partage
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
-
-if 'authenticated' not in st.session_state: 
-    st.session_state.authenticated = False
+if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>🔐 Connexion</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🔐 Connexion</h1>", unsafe_allow_html=True)
     with st.form("login"):
         u_i = st.text_input("Identifiant")
         p_i = st.text_input("Mot de passe", type="password")
@@ -98,32 +78,26 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- 4. CHARGEMENT DES DONNÉES ---
+# --- 4. DATA ---
 curr_user = st.session_state.user_key
+h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
+# On récupère aussi le group_id pour les congés
+c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
+u_a = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
+u_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type', 'group_id'])
 
-def fetch_data():
-    h_res = supabase.table("heures").select("*").eq("user", curr_user).execute()
-    c_res = supabase.table("conges").select("*").eq("user", curr_user).execute()
-    df_h = pd.DataFrame(h_res.data) if h_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'val'])
-    df_c = pd.DataFrame(c_res.data) if c_res.data else pd.DataFrame(columns=['id', 'user', 'date', 'type'])
-    return df_h, df_c
-
-u_a, u_c = fetch_data()
-
-# --- 5. PARAMÈTRES & CALCULS ---
-st.sidebar.title("⚙️ Paramètres")
-sol_date = st.sidebar.date_input("Journée de Solidarité", value=date(2026, 6, 1))
-
+# --- 5. CALCULS ---
+sol_date = date(2026, 6, 1)
 my_theo = calculate_due_fast(u_c.copy(), sol_date)
 val_ajust = u_a['val'].astype(float).sum() if not u_a.empty else 0
 my_delta = USERS[curr_user]["base_sup"] + val_ajust
 fait = my_theo + my_delta
 objectif = 1652.0
 
-# --- 6. INTERFACE DASHBOARD ---
+# --- 6. INTERFACE ---
 st.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>Hello {curr_user}</h1>", unsafe_allow_html=True)
 
-# Affichage Progression (Minutes précises)
+# Barre de progression
 fait_str = to_hm(fait).replace("+", "")
 st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -5px;">
@@ -133,7 +107,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.progress(min(max(fait / objectif, 0.0), 1.0))
 
-# Bloc Balance (Formaté et centré)
+# Balance
 balance_str = to_hm(my_delta)
 color_delta = "#238636" if my_delta >= 0 else "#da3633"
 st.markdown(f"""
@@ -143,44 +117,35 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 7. ONGLETS ---
 tab1, tab2 = st.tabs(["⚡ Heures", "🌴 Congés"])
 
 with tab1:
-    @st.fragment
-    def section_heures():
-        with st.expander("➕ Enregistrer des heures"):
-            with st.form("h_form", clear_on_submit=True):
-                typ = st.radio("Type", ["Plus (+)", "Moins (-)"], horizontal=True)
-                dat = st.date_input("Date", value=date.today())
-                c1, c2 = st.columns(2)
-                h_v, m_v = c1.number_input("H", 0, 12, 0), c2.number_input("M", 0, 59, 0)
-                if st.form_submit_button("Valider", use_container_width=True):
-                    val = (h_v + m_v/60) * (-1 if "Moins" in typ else 1)
-                    supabase.table("heures").insert({"user": curr_user, "date": str(dat), "val": val}).execute()
-                    st.rerun()
-        
-        st.subheader("🗑️ Historique")
-        if u_a.empty: st.info("Aucune heure enregistrée.")
-        else:
-            for _, row in u_a.iloc[::-1].iterrows():
-                # CORRECTION : Utilisation de colonnes très déséquilibrées pour forcer l'alignement
-                col_text, col_btn = st.columns([0.85, 0.15])
-                date_fmt = pd.to_datetime(row['date']).strftime("%d/%m")
-                col_text.write(f"**{date_fmt}** : `{to_hm(row['val'])}`")
-                # Le bouton🗑️ est sur la même ligne physique
-                if col_btn.button("🗑️", key=f"h_{row['id']}"):
-                    supabase.table("heures").delete().eq("id", row['id']).execute()
-                    st.rerun()
-    section_heures()
+    with st.expander("➕ Enregistrer des heures"):
+        with st.form("h_form", clear_on_submit=True):
+            typ = st.radio("Type", ["Plus (+)", "Moins (-)"], horizontal=True)
+            dat = st.date_input("Date", value=date.today())
+            c1, c2 = st.columns(2)
+            h_v, m_v = c1.number_input("H", 0, 12, 0), c2.number_input("M", 0, 59, 0)
+            if st.form_submit_button("Valider", use_container_width=True):
+                val = (h_v + m_v/60) * (-1 if "Moins" in typ else 1)
+                supabase.table("heures").insert({"user": curr_user, "date": str(dat), "val": val}).execute()
+                st.rerun()
+    
+    st.subheader("🗑️ Historique")
+    if u_a.empty: st.info("Vide")
+    else:
+        for _, row in u_a.iloc[::-1].iterrows():
+            col_t, col_b = st.columns([0.85, 0.15])
+            d_f = pd.to_datetime(row['date']).strftime("%d/%m")
+            col_t.write(f"**{d_f}** : `{to_hm(row['val'])}`")
+            if col_b.button("🗑️", key=f"h_{row['id']}"):
+                supabase.table("heures").delete().eq("id", row['id']).execute()
+                st.rerun()
 
 with tab2:
+    # Calendrier visuel
     today_dt = datetime.now()
-    posees = []
-    if not u_c.empty:
-        u_c['dt_obj'] = pd.to_datetime(u_c['date'])
-        posees = u_c[u_c['dt_obj'].dt.month == today_dt.month]['dt_obj'].dt.day.tolist()
-
+    posees = pd.to_datetime(u_c['date']).dt.day.tolist() if not u_c.empty else []
     st.write(f"📅 **{calendar.month_name[today_dt.month]} {today_dt.year}**")
     cal_html = "<div style='display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:15px;'>"
     for d in ["L","M","M","J","V","S","D"]: cal_html += f"<b style='text-align:center; font-size:0.7em; color:white;'>{d}</b>"
@@ -193,37 +158,43 @@ with tab2:
                 cal_html += f"<div style='text-align:center; padding:8px 0; background:{bg}; border:{border}; border-radius:5px; color:white; font-size:0.8em;'>{day}</div>"
     st.markdown(cal_html + "</div>", unsafe_allow_html=True)
 
-    @st.fragment
-    def section_conges():
-        with st.expander("➕ Poser un congé / une période"):
-            with st.form("c_form", clear_on_submit=True):
-                # Réintégration de la sélection multi-dates
-                sel_dates = st.date_input("Date ou Période", value=[date.today()])
-                t_v = st.radio("Durée par jour", ["Journée", "Demi"], horizontal=True)
-                val_c = 1.0 if t_v == "Journée" else 0.5
-                if st.form_submit_button("Confirmer", use_container_width=True):
-                    if isinstance(sel_dates, (list, tuple)):
-                        if len(sel_dates) == 1: dates_to_add = [sel_dates[0]]
-                        else: dates_to_add = pd.date_range(start=sel_dates[0], end=sel_dates[1], freq='D').date
-                    else: dates_to_add = [sel_dates]
-                    new_rows = [{"user": curr_user, "date": str(d), "type": val_c} for d in dates_to_add if d.weekday() < 5]
-                    if new_rows:
-                        supabase.table("conges").insert(new_rows).execute()
-                        st.rerun()
-
-        st.subheader("🗑️ Liste des congés")
-        if u_c.empty: st.info("Aucun congé.")
-        else:
-            for _, row in u_c.iloc[::-1].iterrows():
-                col_text_c, col_btn_c = st.columns([0.85, 0.15])
-                date_fmt_c = pd.to_datetime(row['date']).strftime("%d/%m")
-                col_text_c.write(f"📅 **{date_fmt_c}** : `{row['type']}j`")
-                if col_btn_c.button("🗑️", key=f"c_{row['id']}"):
-                    supabase.table("conges").delete().eq("id", row['id']).execute()
+    with st.expander("➕ Poser une période"):
+        with st.form("c_form", clear_on_submit=True):
+            sel_dates = st.date_input("Dates", value=[date.today()])
+            t_v = st.radio("Durée", ["Journée", "Demi"], horizontal=True)
+            val_c = 1.0 if t_v == "Journée" else 0.5
+            if st.form_submit_button("Confirmer", use_container_width=True):
+                g_id = str(uuid.uuid4()) # Identifiant unique pour le groupe
+                if isinstance(sel_dates, (list, tuple)) and len(sel_dates) > 1:
+                    dates_to_add = pd.date_range(start=sel_dates[0], end=sel_dates[1], freq='D').date
+                else: dates_to_add = [sel_dates[0] if isinstance(sel_dates, (list, tuple)) else sel_dates]
+                
+                new_rows = [{"user": curr_user, "date": str(d), "type": val_c, "group_id": g_id} for d in dates_to_add if d.weekday() < 5]
+                if new_rows:
+                    supabase.table("conges").insert(new_rows).execute()
                     st.rerun()
-    section_conges()
 
-# --- 8. DÉCONNEXION ---
+    st.subheader("🗑️ Liste des congés")
+    if u_c.empty: st.info("Aucun congé.")
+    else:
+        # GROUPEMENT PAR GROUP_ID POUR LA SUPPRESSION
+        # On trie pour avoir les plus récents en haut
+        u_c['dt_obj'] = pd.to_datetime(u_c['date'])
+        groups = u_c.sort_values('dt_obj', ascending=False).groupby('group_id', sort=False)
+        
+        for g_id, data in groups:
+            col_t, col_b = st.columns([0.85, 0.15])
+            start_f = data['dt_obj'].min().strftime("%d/%m")
+            end_f = data['dt_obj'].max().strftime("%d/%m")
+            
+            label = f"Du {start_f} au {end_f}" if len(data) > 1 else f"Le {start_f}"
+            col_t.write(f"📅 **{label}** ({data.iloc[0]['type']}j/j)")
+            
+            if col_b.button("🗑️", key=f"g_{g_id}"):
+                # SUPPRESSION DE TOUT LE GROUPE D'UN COUP
+                supabase.table("conges").delete().eq("group_id", g_id).execute()
+                st.rerun()
+
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.session_state.authenticated = False
     st.rerun()
