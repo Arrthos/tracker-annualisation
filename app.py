@@ -147,27 +147,48 @@ with tab2:
             half = st.checkbox("Demi-journée")
             if st.button("Enregistrer Jour", type="primary"):
                 if d_u.weekday() < 5:
-                    supabase.table("conges").insert({
-                        "user": curr_user, "date": str(d_u), 
+                    # Insertion d'une ligne unique
+                    res = supabase.table("conges").insert({
+                        "user": curr_user, 
+                        "date": str(d_u), 
                         "type": 0.5 if half else 1.0, 
                         "group_id": str(uuid.uuid4())
                     }).execute()
                     st.rerun()
+                else: st.error("Impossible de poser sur un week-end")
         else:
             st.subheader("📅 Période")
-            # Correction ici pour l'enregistrement
-            d_range = st.date_input("Début et fin", [date.today(), date.today()], key="range_d")
+            # Utilisation d'un identifiant unique pour st.date_input
+            d_range = st.date_input("Début et fin", value=[], key="range_input_final")
+            
             if st.button("Enregistrer Période", type="primary"):
+                # Vérification que deux dates sont bien sélectionnées
                 if isinstance(d_range, list) and len(d_range) == 2:
                     g_id = str(uuid.uuid4())
-                    all_days = pd.date_range(d_range[0], d_range[1], freq='D').date
+                    start_date, end_date = d_range[0], d_range[1]
+                    
+                    # Génération des jours entre début et fin
+                    all_days = pd.date_range(start_date, end_date, freq='D').date
+                    
                     rows = []
                     for day in all_days:
-                        if day.weekday() < 5:
-                            rows.append({"user": curr_user, "date": str(day), "type": 1.0, "group_id": g_id})
+                        if day.weekday() < 5: # Uniquement jours ouvrés
+                            rows.append({
+                                "user": curr_user, 
+                                "date": str(day), 
+                                "type": 1.0, 
+                                "group_id": g_id
+                            })
+                    
                     if rows:
                         supabase.table("conges").insert(rows).execute()
+                        st.success(f"{len(rows)} jours enregistrés !")
                         st.rerun()
+                else:
+                    st.warning("Veuillez cliquer sur la date de début PUIS sur la date de fin dans le calendrier.")
+
+    st.subheader("Historique")
+    # ... reste du code pour l'affichage de l'historique ...
 
     st.subheader("Historique")
     if not u_c.empty:
