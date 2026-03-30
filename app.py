@@ -54,7 +54,7 @@ def calculate_due_fast(df_conges, solidarity_day):
     return df_dates['h_theo'].sum()
 
 # --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 
 if 'authenticated' not in st.session_state: 
     st.session_state.authenticated = False
