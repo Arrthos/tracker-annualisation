@@ -6,73 +6,60 @@ import holidays
 import uuid
 from supabase import create_client
 
-# --- 1. CONFIG & DESIGN PREMIUM (GLASSMORPHISM) ---
+# --- 1. CONFIG & DESIGN ÉPURÉ PRO ---
 st.set_page_config(page_title="Work Tracker Pro", layout="centered")
 
 st.markdown("""
     <style>
-    /* Fond profond et épuré */
-    .stApp { background-color: #0E1117; }
+    /* Fond sombre et texte blanc cassé */
+    .stApp { background-color: #0E1117; color: #EAEAEA; }
     header {visibility: hidden;}
     
-    /* Design des cartes Glassmorphism vaporeuses */
+    /* Carte de balance Glassmorphism */
     .glass-card {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 15px;
-        border-radius: 15px;
+        padding: 30px;
+        border-radius: 20px;
         text-align: center;
         backdrop-filter: blur(10px);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        margin-bottom: 20px;
+        margin-top: 20px;
+        margin-bottom: 30px;
     }
 
-    /* Style du chiffre clé (Jaune Pastel) */
-    .glass-metric {
-        font-size: 5rem;
+    /* Typographie des métriques */
+    .balance-val {
+        font-size: 5.5rem;
         font-weight: 800;
-        letter-spacing: -2px;
+        letter-spacing: -3px;
         margin: 10px 0;
-        color: #F1C40F;
     }
-    .balance-neg { color: #da3633; }
+    .pos { color: #2ECC71; } /* Vert émeraude */
+    .neg { color: #E74C3C; } /* Rouge corail */
 
-    /* Texte descriptif reposant */
-    .stMarkdown, p, small { color: #EAEAEA; }
-
-    /* Progress Bar fine Violette */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #7D2AE8, #9B59B6);
-        height: 8px;
-    }
-
-    /* Boutons et Inputs épurés */
-    .stButton>button {
-        border-radius: 10px !important;
-        background-color: transparent !important;
-        border: 2px solid #F1C40F !important;
-        color: #F1C40F !important;
-        font-weight: bold !important;
-        transition: 0.3s ease !important;
-    }
-    .stButton>button:hover {
-        background-color: #F1C40F !important;
-        color: #0E1117 !important;
-    }
+    /* Suppression du jaune, utilisation du blanc et gris */
+    .stMarkdown, p, small, label { color: #EAEAEA !important; }
     
-    /* Onglets épurés */
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; background-color: transparent; }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        background-color: transparent !important;
+    /* Boutons et Progress Bar */
+    .stButton>button {
+        border-radius: 12px !important;
+        background-color: #FDFDFD !important;
+        color: #0E1117 !important;
+        font-weight: 700 !important;
         border: none !important;
-        color: #888 !important;
     }
-    .stTabs [aria-selected="true"] { color: #EAEAEA !important; border-bottom: 2px solid #7D2AE8 !important; }
+    .stProgress > div > div > div > div {
+        background-color: #3498DB;
+        height: 6px;
+    }
+
+    /* Onglets */
+    .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
+    .stTabs [aria-selected="true"] { border-bottom: 2px solid #FDFDFD !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIQUE DE CALCUL THÉORIQUE ---
+# --- 2. LOGIQUE DE CALCUL ---
 @st.cache_resource
 def get_supabase(): return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 supabase = get_supabase()
@@ -105,13 +92,10 @@ def calculate_metrics(df_conges, solidarity_day):
         df['h_theo'] = np.maximum(0, df['h_theo'] * (1 - df['c_val']))
     return df['h_theo'].sum()
 
-# --- AUTHENTIFICATION ---
-# Julien est configuré ici
+# --- 3. AUTH & DATA ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align:center;'>Work Tracker Pro</h2>", unsafe_allow_html=True)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
         if st.form_submit_button("ENTRER"):
@@ -120,103 +104,84 @@ if not st.session_state.authenticated:
                 st.rerun()
     st.stop()
 
-# --- CHARGEMENT DONNÉES ---
 curr_user = st.session_state.user_key
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
-# --- DASHBOARD VISUEL PREMIUM ---
+# --- 4. DASHBOARD ---
 sol_date = date(2026, 6, 1)
 du = calculate_metrics(u_c.copy(), sol_date)
 delta = USERS[curr_user]["base_sup"] + (u_a['val'].astype(float).sum() if not u_a.empty else 0)
 fait = du + delta
 
-st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:-10px;'>Bonjour,</p><h2 style='text-align:center;'>{curr_user}</h2>", unsafe_allow_html=True)
+st.markdown(f"<h2 style='text-align:center;'>{curr_user}</h2>", unsafe_allow_html=True)
 
-# Grande carte de Balance
-neg_class = "balance-neg" if delta < 0 else ""
+# Affichage dynamique Vert/Rouge
+status_class = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
-        <p style="color:#888; font-size:0.9rem; margin:0;">BALANCE HEURES SUP.</p>
-        <div class="glass-metric {neg_class}">{to_hm(delta)}</div>
+        <small style="color:#888; letter-spacing:2px;">BALANCE ACTUELLE</small>
+        <div class="balance-val {status_class}">{to_hm(delta)}</div>
     </div>
 """, unsafe_allow_html=True)
 
-# Barre de progression épurée
-col_a, col_b = st.columns([1, 1])
-col_a.markdown(f"<small style='color:#888;'>DÛ : **{int(du)}h**</small>", unsafe_allow_html=True)
-col_b.markdown(f"<p style='text-align:right;'><small style='color:#888;'>FAIT : **{to_hm(fait).replace('+','')}**</small></p>", unsafe_allow_html=True)
+# Comparatif Dû/Fait
+col_a, col_b = st.columns(2)
+col_a.markdown(f"<small>DÛ : **{int(du)}h**</small>", unsafe_allow_html=True)
+col_b.markdown(f"<p style='text-align:right;'><small>FAIT : **{to_hm(fait).replace('+','')}**</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
-
-st.write("") # Espacement
-
-# Agenda en mode horizontal (Timeline)
-st.markdown("<small style='color:#666; font-weight:bold; letter-spacing:1px;'>AGENDA</small>", unsafe_allow_html=True)
-today = date.today()
-fr_h = get_fr_holidays([today.year])
-posees = pd.to_datetime(u_c['date']).dt.date.tolist() if not u_c.empty else []
-agenda_cols = st.columns(5)
-for i in range(5):
-    d = today + timedelta(days=i)
-    bg = "rgba(255,255,255,0.05)"
-    icon = ""
-    if d in fr_h: bg = "rgba(241, 196, 15, 0.15)"; icon="🎉"
-    if d in posees: bg = "rgba(125, 42, 232, 0.15)"; icon="🌴"
-    agenda_cols[i].markdown(f"<div style='background:{bg}; padding:10px; border-radius:10px; text-align:center;'><small style='color:#888;'>{d.strftime('%a')}</small><br><b>{d.strftime('%d/%m')}</b><br>{icon}</div>", unsafe_allow_html=True)
 
 st.write("")
 
-# --- TABS ---
+# --- 5. TABS ---
 tab1, tab2 = st.tabs(["⚡ HEURES", "🌴 CONGÉS"])
 
 with tab1:
-    with st.expander("Saisir des heures supplémentaires"):
+    with st.expander("Enregistrer des heures"):
         with st.form("h_f", clear_on_submit=True):
-            typ = st.radio("Sens", ["Plus (+)", "Moins (-)"], horizontal=True)
-            d = st.date_input("Date", today)
-            c_h, c_m = st.columns(2)
-            hv, mv = c_h.number_input("H", 0, 12, 0), c_m.number_input("M", 0, 59, 0)
+            typ = st.radio("Type", ["Plus (+)", "Moins (-)"], horizontal=True)
+            d = st.date_input("Date", date.today())
+            h, m = st.columns(2)
+            hv, mv = h.number_input("Heures", 0, 12, 0), m.number_input("Minutes", 0, 59, 0)
             if st.form_submit_button("VALIDER"):
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": (hv + mv/60) * (-1 if "Moins" in typ else 1)}).execute()
                 st.rerun()
     
-    # Historique Heures épuré
     for _, row in u_a.iloc[::-1].iterrows():
-        cx, cy = st.columns([0.8, 0.2])
-        cx.write(f"📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp; <b>{to_hm(row['val'])}</b>", unsafe_allow_html=True)
-        if cy.button("🗑️", key=f"h_{row['id']}"):
+        c1, c2 = st.columns([0.85, 0.15])
+        c1.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : **{to_hm(row['val'])}**</div>", unsafe_allow_html=True)
+        if c2.button("🗑️", key=f"h_{row['id']}"):
             supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
 
 with tab2:
-    is_p = st.toggle("Activer mode Période", value=False)
-    with st.container(border=True):
-        if not is_p:
-            d_u = st.date_input("Date du congé", today)
-            half = st.checkbox("Demi-journée")
-            if st.button("CONFIRMER LE JOUR", type="primary"):
-                if d_u.weekday() < 5:
-                    supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
-                    st.rerun()
-        else:
-            c1, c2 = st.columns(2)
-            d_s, d_e = c1.date_input("Du", today), c2.date_input("Au", today + timedelta(days=1))
-            if st.button("CONFIRMER LA PÉRIODE", type="primary"):
-                if d_s <= d_e:
-                    g_id = str(uuid.uuid4())
-                    days = pd.date_range(d_s, d_e, freq='D').date
-                    rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": g_id} for day in days if day.weekday() < 5]
-                    if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
+    is_p = st.toggle("Mode Période", value=False)
+    if not is_p:
+        d_u = st.date_input("Choisir le jour", date.today())
+        half = st.checkbox("Demi-journée")
+        if st.button("ENREGISTRER JOUR"):
+            if d_u.weekday() < 5:
+                supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
+                st.rerun()
+    else:
+        c1, c2 = st.columns(2)
+        ds, de = c1.date_input("Du", date.today()), c2.date_input("Au", date.today() + timedelta(days=1))
+        if st.button("ENREGISTRER PÉRIODE"):
+            if ds <= de:
+                gid = str(uuid.uuid4())
+                days = pd.date_range(ds, de, freq='D').date
+                rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
+                if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
 
-    # Historique Congés épuré
+    st.write("")
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            c1, c2 = st.columns([0.8, 0.2])
+            c1, c2 = st.columns([0.85, 0.15])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
-            c1.write(f"🌴 {lbl}")
+            c1.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
             if c2.button("🗑️", key=f"g_{gid}"):
                 supabase.table("conges").delete().eq("group_id", gid).execute(); st.rerun()
