@@ -46,7 +46,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIQUE (Identique) ---
+# --- 2. LOGIQUE ---
 @st.cache_resource
 def get_supabase(): return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 supabase = get_supabase()
@@ -80,7 +80,7 @@ def calculate_metrics(df_conges, solidarity_day):
     return df['h_theo'].sum()
 
 # --- 3. AUTH & DATA ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if not st.session_state.authenticated:
     with st.form("login"):
@@ -97,36 +97,38 @@ c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().da
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
-# --- 4. DASHBOARD ---
+# --- 4. CALCULS ---
 sol_date = date(2026, 6, 1)
 du = calculate_metrics(u_c.copy(), sol_date)
 delta = USERS[curr_user]["base_sup"] + (u_a['val'].astype(float).sum() if not u_a.empty else 0)
 fait = du + delta
 
-# A. Header
+# --- 5. INTERFACE DASHBOARD ---
+
+# A. Header "Bonjour, Julien"
 st.markdown(f"<p style='text-align:center; color:#888; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 
 # B. Progress Bar (Prioritaire)
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small><b>{int(fait)}h</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
-# C. Balance Card
+# C. Balance Card (Vert/Rouge)
 status_class = "pos" if delta >= 0 else "neg"
 st.markdown(f"""
     <div class="glass-card">
-        <small class="sub-text">BALANCE ACTUELLE</small>
+        <small style="color:#888; letter-spacing:1px;">BALANCE ACTUELLE</small>
         <div class="balance-val {status_class}">{to_hm(delta)}</div>
     </div>
 """, unsafe_allow_html=True)
 
 # D. Dû et Fait sur la même ligne
-col1, col2 = st.columns(2)
-col1.markdown(f"<p style='text-align:left;'><small class="sub-text">DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
-col2.markdown(f"<p style='text-align:right;'><small class="sub-text">FAIT :</small> <b>{to_hm(fait).replace('+','')}</b></p>", unsafe_allow_html=True)
+c1, c2 = st.columns(2)
+c1.markdown(f"<p style='text-align:left;'><small style='color:#888;'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
+c2.markdown(f"<p style='text-align:right;'><small style='color:#888;'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 5. TABS ---
+# --- 6. TABS SAISIE ---
 tab1, tab2 = st.tabs(["⚡ HEURES", "🌴 CONGÉS"])
 
 with tab1:
@@ -141,9 +143,9 @@ with tab1:
                 st.rerun()
     
     for _, row in u_a.iloc[::-1].iterrows():
-        c1, c2 = st.columns([0.85, 0.15])
-        c1.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-        if c2.button("🗑️", key=f"h_{row['id']}"):
+        cx, cy = st.columns([0.85, 0.15])
+        cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+        if cy.button("🗑️", key=f"h_{row['id']}"):
             supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
 
 with tab2:
@@ -168,9 +170,9 @@ with tab2:
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            c1, c2 = st.columns([0.85, 0.15])
+            cx, cy = st.columns([0.85, 0.15])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
-            c1.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
-            if c2.button("🗑️", key=f"g_{gid}"):
+            cx.markdown(f"<div style='background:rgba(255,255,255,0.02); padding:10px; border-radius:10px; margin-bottom:5px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            if cy.button("🗑️", key=f"g_{gid}"):
                 supabase.table("conges").delete().eq("group_id", gid).execute(); st.rerun()
