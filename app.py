@@ -28,6 +28,7 @@ design_css = """
         text-align: center;
         backdrop-filter: blur(15px);
         margin: 15px 0;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     }
 
     .balance-val { font-size: 5.5rem; font-weight: 800; letter-spacing: -3px; margin: 5px 0; }
@@ -42,7 +43,7 @@ design_css = """
 
     .holiday-badge {
         display: inline-block;
-        background: rgba(52, 152, 219, 0.15);
+        background: rgba(52, 152, 219, 0.12);
         color: #3498DB;
         padding: 6px 14px;
         border-radius: 20px;
@@ -50,20 +51,12 @@ design_css = """
         font-weight: 600;
         margin-right: 8px;
         margin-bottom: 8px;
-        border: 1px solid rgba(52, 152, 219, 0.3);
+        border: 1px solid rgba(52, 152, 219, 0.2);
     }
 
-    /* Style spécifique pour l'expander de paramètres */
-    .stDetails {
-        border: none !important;
-        background: transparent !important;
-    }
-    summary { 
-        color: #9BA1B0 !important; 
-        font-size: 0.8rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
+    /* Style minimaliste pour l'expander de solidarité */
+    .stDetails { border: none !important; background: transparent !important; }
+    summary { color: #9BA1B0 !important; font-size: 0.75rem !important; opacity: 0.7; }
     </style>
 """
 st.markdown(design_css, unsafe_allow_html=True)
@@ -107,7 +100,7 @@ def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
 # --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}}
+USERS = {"Julien": {"password": "123", "base_sup": 20.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
@@ -117,7 +110,7 @@ if not st.session_state.authenticated:
         st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
-        if st.form_submit_button("Connexion"):
+        if st.form_submit_button("ENTRER"):
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
@@ -142,24 +135,14 @@ st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonj
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / 1652.0, 0.0), 1.0))
 
+# Carte Balance unique
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
-# Menu Paramètres épuré juste sous la carte
-with st.expander("⚙️ Journée de solidarité"):
-    new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
-    if new_sol != st.session_state.solidarity_date:
-        st.session_state.solidarity_date = new_sol
-        st.rerun()
-
-c1, c2 = st.columns(2)
-c1.markdown(f"<p style='text-align:left;'><small style='color:#9BA1B0'>DÛ :</small> <b>{int(du)}h</b></p>", unsafe_allow_html=True)
-c2.markdown(f"<p style='text-align:right;'><small style='color:#9BA1B0'>FAIT :</small> <b>{to_hm(fait).replace('+', '')}</b></p>", unsafe_allow_html=True)
-
 st.write("---")
 
-# --- 6. FÉRIÉS (2 SEMAINES) ---
-st.markdown("#### 📅 Prochains Jours Fériés")
+# --- 6. FÉRIÉS & SOLIDARITÉ ---
+st.markdown("#### 📅 Jours Fériés (2 semaines)")
 fr_h = get_fr_holidays([datetime.now().year])
 badges = []
 for d_h, name in sorted(fr_h.items()):
@@ -169,11 +152,18 @@ for d_h, name in sorted(fr_h.items()):
 if badges:
     st.markdown(f'<div>{" ".join(badges)}</div>', unsafe_allow_html=True)
 else:
-    st.info("Aucun férié dans les 2 prochaines semaines.")
+    st.info("Aucun férié proche.")
+
+# Réglage solidarité déplacé ici
+with st.expander("⚙️ RÉGLER LA SOLIDARITÉ"):
+    new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
+    if new_sol != st.session_state.solidarity_date:
+        st.session_state.solidarity_date = new_sol
+        st.rerun()
 
 st.write("")
 
-# --- 7. ONGLETS ---
+# --- 7. ONGLETS DE SAISIE ---
 t1, t2 = st.tabs(["⚡ HEURES SUP", "🌴 CONGÉS"])
 
 with t1:
