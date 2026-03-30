@@ -7,9 +7,9 @@ import holidays
 # --- 1. CONFIGURATION DES UTILISATEURS ---
 # Tu peux ajouter tes collègues ici
 USERS = {
-    "ton_nom": {"password": "123", "base_sup": 20.5, "full_name": "Ton Prénom"},
-    "collegue1": {"password": "abc", "base_sup": 10.0, "full_name": "Jean Dupont"},
-    "collegue2": {"password": "456", "base_sup": -5.5, "full_name": "Marie Curie"}
+    "Julien": {"password": "123", "base_sup": 20.5, "Regnault": "Julien"},
+    #"collegue1": {"password": "abc", "base_sup": 10.0, "full_name": "Jean Dupont"},
+    #"collegue2": {"password": "456", "base_sup": -5.5, "full_name": "Marie Curie"}
 }
 
 # --- 2. CONFIGURATION DE LA PAGE ---
