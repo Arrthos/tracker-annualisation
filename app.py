@@ -101,7 +101,7 @@ def load_img(path):
 
 # --- 3. AUTHENTIFICATION ---
 USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}, 
-        "Alexis": {"password": "ALenfant10", "base_sup": 18,5}}
+        "Alexis": {"password": "ALenfant10", "base_sup": 18.5}}
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
