@@ -102,7 +102,7 @@ def load_img(path):
 # Mise à jour des contrats ici
 USERS = {
     "Julien": {"password": "%Gfpass115", "base_sup": 20.5, "contrat": 1652}, 
-    "Alexis": {"password": "ALenfant10", "base_sup": 0, "contrat": 1602}
+    "Alexis": {"password": "ALenfant10", "base_sup": 16.75, "contrat": 1602}
 }
 
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
