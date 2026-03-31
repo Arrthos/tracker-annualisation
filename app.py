@@ -9,7 +9,7 @@ import base64
 import os
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Work Tracker Pro", layout="centered")
+st.set_page_config(page_title="Annualisation Gamba Rota", layout="centered")
 
 design_css = """
     <style>
