@@ -142,7 +142,7 @@ st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURE
 st.write("---")
 
 # --- 6. FÉRIÉS & SOLIDARITÉ ---
-st.markdown("#### 📅 Jours Fériés (2 semaines)")
+st.markdown("#### 📅 Jours Fériés")
 fr_h = get_fr_holidays([datetime.now().year])
 badges = []
 for d_h, name in sorted(fr_h.items()):
@@ -155,7 +155,7 @@ else:
     st.info("Aucun férié proche.")
 
 # Réglage solidarité déplacé ici
-with st.expander("⚙️ RÉGLER LA SOLIDARITÉ"):
+with st.expander("⚙️ Journée de solidarité"):
     new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
         st.session_state.solidarity_date = new_sol
@@ -173,7 +173,7 @@ with t1:
             d = st.date_input("Date", date.today())
             h_col, m_col = st.columns(2)
             hv, mv = h_col.number_input("H", 0, 12, 0), m_col.number_input("M", 0, 59, 0)
-            if st.form_submit_button("VALIDER"):
+            if st.form_submit_button("Valider"):
                 val = (hv + mv/60) * (-1 if "Moins" in typ else 1)
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
@@ -188,14 +188,14 @@ with t2:
     if not st.toggle("Mode Période", value=False):
         d_u = st.date_input("Jour", date.today())
         half = st.checkbox("Demi-journée")
-        if st.button("ENREGISTRER"):
+        if st.button("Enregistrer"):
             if d_u.weekday() < 5:
                 supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
                 st.rerun()
     else:
         cs, ce = st.columns(2)
         ds, de = cs.date_input("Début", date.today()), ce.date_input("Fin", date.today() + timedelta(days=1))
-        if st.button("ENREGISTRER PÉRIODE"):
+        if st.button("Enregistrer période"):
             gid = str(uuid.uuid4())
             days = pd.date_range(ds, de, freq='D').date
             rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
