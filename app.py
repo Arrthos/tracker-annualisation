@@ -56,7 +56,7 @@ design_css = """
 
     /* Style minimaliste pour l'expander de solidarité */
     .stDetails { border: none !important; background: transparent !important; }
-    summary { color: #9BA1B0 !important; font-size: 0.75rem !important; opacity: 0.7; }
+    summary { color: #9BA1B0 !important; font-size: 0.5rem !important; opacity: 0.7; }
     </style>
 """
 st.markdown(design_css, unsafe_allow_html=True)
