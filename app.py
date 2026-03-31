@@ -169,7 +169,7 @@ with st.expander("⚙️ Journée de solidarité"):
 st.write("")
 
 # --- 7. ONGLETS DE SAISIE ---
-t1, t2 = st.tabs(["⚡ HEURES SUP", "🌴 CONGÉS"])
+t1, t2 = st.tabs(["⚡ Heures supp", "🌴 Congés" / Arret"])
 
 with t1:
     with st.expander("➕ Enregistrer des heures"):
