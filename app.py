@@ -54,9 +54,8 @@ design_css = """
         border: 1px solid rgba(52, 152, 219, 0.2);
     }
 
-    /* Style minimaliste pour l'expander de solidarité */
     .stDetails { border: none !important; background: transparent !important; }
-    summary { color: #9BA1B0 !important; font-size: 0.5rem !important; opacity: 0.7; }
+    summary { color: #9BA1B0 !important; font-size: 0.8rem !important; opacity: 0.7; }
     </style>
 """
 st.markdown(design_css, unsafe_allow_html=True)
@@ -99,9 +98,13 @@ def calculate_metrics(df_conges, solidarity_day):
 def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
-# --- 3. AUTHENTIFICATION ---
-USERS = {"Julien": {"password": "%Gfpass115", "base_sup": 20.5}, 
-        "Alexis": {"password": "ALenfant10", "base_sup": 18.5}}
+# --- 3. AUTHENTIFICATION & PARAMÈTRES ---
+# Mise à jour des contrats ici
+USERS = {
+    "Julien": {"password": "%Gfpass115", "base_sup": 20.5, "contrat": 1652}, 
+    "Alexis": {"password": "ALenfant10", "base_sup": 18.5, "contrat": 1602}
+}
+
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
 
@@ -121,6 +124,8 @@ st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</
 
 # --- 4. DATA & CALCULS ---
 curr_user = st.session_state.user_key
+h_contrat = USERS[curr_user]["contrat"] # Récupération dynamique du contrat
+
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
@@ -133,10 +138,10 @@ fait = du + delta
 
 # --- 5. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / 1652h</small></p>", unsafe_allow_html=True)
-st.progress(min(max(fait / 1652.0, 0.0), 1.0))
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
+st.progress(min(max(fait / float(h_contrat), 0.0), 1.0))
 
-# Carte Balance unique
+# Carte Balance
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
@@ -155,7 +160,6 @@ if badges:
 else:
     st.info("Aucun férié proche.")
 
-# Réglage solidarité déplacé ici
 with st.expander("⚙️ Journée de solidarité"):
     new_sol = st.date_input("Date de la journée travaillée :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
@@ -179,11 +183,12 @@ with t1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
     
-    for _, row in u_a.iloc[::-1].iterrows():
-        cx, cy = st.columns([0.85, 0.15])
-        cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-        if cy.button("🗑️", key=f"h_{row['id']}"):
-            supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
+    if not u_a.empty:
+        for _, row in u_a.sort_values('date', ascending=False).iterrows():
+            cx, cy = st.columns([0.85, 0.15])
+            cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+            if cy.button("🗑️", key=f"h_{row['id']}"):
+                supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
 
 with t2:
     if not st.toggle("Mode Période", value=False):
