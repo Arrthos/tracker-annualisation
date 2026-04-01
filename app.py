@@ -11,7 +11,6 @@ import os
 # --- 1. CONFIGURATION & SESSION STATE ---
 st.set_page_config(page_title="Annualisation Gamba Rota", layout="centered")
 
-# Initialisation critique
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_key' not in st.session_state:
@@ -33,7 +32,6 @@ design_css = """
         text-align: center;
         backdrop-filter: blur(15px);
         margin: 15px 0;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     }
 
     .balance-val { font-size: 5.5rem; font-weight: 800; letter-spacing: -3px; margin: 5px 0; }
@@ -46,40 +44,30 @@ design_css = """
         border-radius: 5px;
     }
 
-    .holiday-badge {
-        display: inline-block;
-        background: rgba(52, 152, 219, 0.12);
-        color: #3498DB;
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin-right: 8px;
-        margin-bottom: 8px;
-        border: 1px solid rgba(52, 152, 219, 0.2);
-    }
-
-    .history-row {
+    /* Style pour les lignes d'historique compactes */
+    .history-container {
         background: rgba(255,255,255,0.03); 
-        padding: 10px; 
+        padding: 8px 12px; 
         border-radius: 10px; 
-        display: flex; 
+        margin-bottom: 6px;
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        height: 48px;
-        margin-bottom: 4px;
-        font-size: 0.95rem;
-        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.05);
     }
     
-    [data-testid="column"] {
-        padding: 0 5px !important;
+    .history-text {
+        font-size: 0.95rem;
+        flex-grow: 1;
     }
 
-    /* TRICHE CSS POUR MOBILE : Aligner le bouton sur la ligne du dessus si empilé */
-    @media (max-width: 640px) {
-        div[data-testid="column"]+div[data-testid="column"] button {
-            margin-top: -55px !important;
-        }
+    /* Ajustement spécifique pour les boutons de suppression */
+    div.stButton > button[key^="h_"], div.stButton > button[key^="g_"] {
+        padding: 0px 10px !important;
+        height: 35px !important;
+        width: 45px !important;
+        background-color: rgba(255, 75, 75, 0.1) !important;
+        border: 1px solid rgba(255, 75, 75, 0.2) !important;
     }
     </style>
 """
@@ -133,14 +121,13 @@ try:
     USERS = st.secrets["users"]
     supabase = get_supabase()
 except Exception:
-    st.error("Erreur de configuration (Secrets ?)")
+    st.error("Erreur de configuration")
     st.stop()
 
 if not st.session_state.authenticated:
     img_base64 = load_img("image_11.png")
     if img_base64:
         st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{img_base64}" width="160"></div>', unsafe_allow_html=True)
-    
     with st.form("login"):
         u = st.text_input("Identifiant")
         p = st.text_input("Mot de passe", type="password")
@@ -150,16 +137,14 @@ if not st.session_state.authenticated:
                 st.session_state.user_key = u
                 st.rerun()
             else:
-                st.error("Échec de connexion")
+                st.error("Échec")
     st.stop()
 
 # --- 5. CHARGEMENT & CALCULS ---
 curr_user = st.session_state.user_key
 user_cfg = USERS[curr_user]
-
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
-
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
@@ -173,28 +158,19 @@ h_contrat = user_cfg["contrat"]
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / float(h_contrat), 0.0), 1.0))
-
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 7. FÉRIÉS & SOLIDARITÉ ---
+# --- 7. FÉRIÉS ---
 with st.expander("📅 Jours Fériés & Paramètres"):
-    fr_h = get_fr_holidays([datetime.now().year])
-    badges = []
-    for d_h, name in sorted(fr_h.items()):
-        if date.today() <= d_h <= (date.today() + timedelta(days=30)):
-            badges.append(f'<span class="holiday-badge">{d_h.strftime("%d/%m")} : {name}</span>')
-    if badges: st.markdown(f'<div>{" ".join(badges)}</div>', unsafe_allow_html=True)
-    
-    st.divider()
     new_sol = st.date_input("Journée de solidarité :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
         st.session_state.solidarity_date = new_sol
         st.rerun()
 
-# --- 8. ONGLETS DE SAISIE ---
+# --- 8. ONGLETS ---
 t1, t2 = st.tabs(["⚡ Heures supp", "🌴 Congés / Arret"])
 
 with t1:
@@ -212,11 +188,13 @@ with t1:
     
     if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            col_left, col_right = st.columns([0.8, 0.2])
-            with col_left:
-                st.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-            with col_right:
-                if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
+            # Affichage en une seule ligne sans st.columns pour mobile
+            date_str = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
+            c1, c2 = st.columns([0.85, 0.15])
+            with c1:
+                st.markdown(f"<div class='history-row'>📅 {date_str} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+            with c2:
+                if st.button("🗑️", key=f"h_{row['id']}"):
                     supabase.table("heures").delete().eq("id", row['id']).execute()
                     st.rerun()
 
@@ -244,14 +222,17 @@ with t2:
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            col_left, col_right = st.columns([0.8, 0.2])
             s, e = data['dt'].min(), data['dt'].max()
-            lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
+            if len(data) > 1:
+                lbl = f"{s.strftime('%d/%m/%Y')} → {e.strftime('%d/%m/%Y')}"
+            else:
+                lbl = f"{s.strftime('%d/%m/%Y')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
             
-            with col_left:
+            c1, c2 = st.columns([0.85, 0.15])
+            with c1:
                 st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
-            with col_right:
-                if st.button("🗑️", key=f"g_{gid}", use_container_width=True):
+            with c2:
+                if st.button("🗑️", key=f"g_{gid}"):
                     supabase.table("conges").delete().eq("group_id", gid).execute()
                     st.rerun()
