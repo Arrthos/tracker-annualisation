@@ -63,7 +63,9 @@ st.markdown(design_css, unsafe_allow_html=True)
 # --- 2. LOGIQUE ---
 @st.cache_resource
 def get_supabase(): 
+    # Utilisation des clés définies dans la section [supabase] des secrets
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+
 supabase = get_supabase()
 
 @st.cache_data(ttl=3600)
@@ -74,7 +76,8 @@ def to_hm(decimal_hours):
     abs_h = abs(decimal_hours)
     h, m = int(abs_h), int(round((abs_h - int(abs_h)) * 60))
     if m == 60: h += 1; m = 0
-    return f"{'-' if decimal_hours < 0 else '+'}{h}h{m:02d}"
+    sign = '-' if decimal_hours < 0 else '+'
+    return f"{sign}{h}h{m:02d}"
 
 def calculate_metrics(df_conges, solidarity_day):
     now = datetime.now()
@@ -99,12 +102,11 @@ def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
 # --- 3. AUTHENTIFICATION & PARAMÈTRES ---
-# Mise à jour des contrats ici
-# Au lieu d'écrire les mots de passe ici :
+# Les mots de passe sont récupérés depuis la section [users] des secrets
 USERS = {
-    "Julien": {"password": "%Track115", "base_sup": 20.5, "contrat": 1652}, 
-    "Alexis": {"password": "ALenfant10", "base_sup": 16.75, "contrat": 1602},
-    "Coralie": {"password": "CMartinot10", "base_sup":0, "contrat": 1652}
+    "Julien": {"password": st.secrets["users"]["Julien"], "base_sup": 20.5, "contrat": 1652}, 
+    "Alexis": {"password": st.secrets["users"]["Alexis"], "base_sup": 16.75, "contrat": 1602},
+    "Coralie": {"password": st.secrets["users"]["Coralie"], "base_sup": 0, "contrat": 1652}
 }
 
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
@@ -120,13 +122,15 @@ if not st.session_state.authenticated:
             if u in USERS and USERS[u]["password"] == p:
                 st.session_state.authenticated, st.session_state.user_key = True, u
                 st.rerun()
+            else:
+                st.error("Identifiants incorrects")
     st.stop()
 
 st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
 
 # --- 4. DATA & CALCULS ---
 curr_user = st.session_state.user_key
-h_contrat = USERS[curr_user]["contrat"] # Récupération dynamique du contrat
+h_contrat = USERS[curr_user]["contrat"]
 
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
@@ -140,10 +144,12 @@ fait = du + delta
 
 # --- 5. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
-st.progress(min(max(fait / float(h_contrat), 0.0), 1.0))
 
-# Carte Balance
+# Sécurité division par zéro
+progression = fait / float(h_contrat) if h_contrat > 0 else 0
+st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
+st.progress(min(max(progression, 0.0), 1.0))
+
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
@@ -182,12 +188,12 @@ with t1:
             hv, mv = h_col.number_input("H", 0, 12, 0), m_col.number_input("M", 0, 59, 0)
             if st.form_submit_button("Valider"):
                 val = (hv + mv/60) * (-1 if "Moins" in typ else 1)
-                supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
+                supabase.table("heures").insert({"user": curr_user, "date": d.isoformat(), "val": val}).execute()
                 st.rerun()
     
     if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            cx, cy = st.columns([0.85, 0.15])
+            cx, cy = st.columns([0.8, 0.2])
             cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
             if cy.button("🗑️", key=f"h_{row['id']}"):
                 supabase.table("heures").delete().eq("id", row['id']).execute(); st.rerun()
@@ -198,7 +204,7 @@ with t2:
         half = st.checkbox("Demi-journée")
         if st.button("Enregistrer"):
             if d_u.weekday() < 5:
-                supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
+                supabase.table("conges").insert({"user": curr_user, "date": d_u.isoformat(), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
                 st.rerun()
     else:
         cs, ce = st.columns(2)
@@ -206,16 +212,19 @@ with t2:
         if st.button("Enregistrer période"):
             gid = str(uuid.uuid4())
             days = pd.date_range(ds, de, freq='D').date
-            rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
-            if rows: supabase.table("conges").insert(rows).execute(); st.rerun()
+            rows = [{"user": curr_user, "date": day.isoformat(), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
+            if rows: 
+                supabase.table("conges").insert(rows).execute()
+                st.rerun()
 
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            cx, cy = st.columns([0.85, 0.15])
+            cx, cy = st.columns([0.8, 0.2])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
             cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
             if cy.button("🗑️", key=f"g_{gid}"):
                 supabase.table("conges").delete().eq("group_id", gid).execute(); st.rerun()
+                
