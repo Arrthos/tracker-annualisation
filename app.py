@@ -9,7 +9,6 @@ import base64
 import os
 
 # --- 1. CONFIGURATION & SESSION STATE ---
-# Toujours en premier pour éviter les erreurs d'initialisation
 st.set_page_config(page_title="Annualisation Gamba Rota", layout="centered")
 
 if 'authenticated' not in st.session_state:
@@ -57,6 +56,22 @@ design_css = """
         margin-right: 8px;
         margin-bottom: 8px;
         border: 1px solid rgba(52, 152, 219, 0.2);
+    }
+
+    /* Style pour les lignes d'historique */
+    .history-row {
+        background: rgba(255,255,255,0.03); 
+        padding: 12px; 
+        border-radius: 12px; 
+        display: flex; 
+        align-items: center;
+        height: 45px;
+        margin-bottom: 8px;
+    }
+    
+    /* Ajustement des boutons pour mobile */
+    div[data-testid="column"] button {
+        margin-top: 0px !important;
     }
     </style>
 """
@@ -106,7 +121,6 @@ def load_img(path):
     return None
 
 # --- 4. AUTHENTIFICATION ---
-# Chargement des utilisateurs depuis les Secrets
 try:
     USERS = st.secrets["users"]
     supabase = get_supabase()
@@ -135,14 +149,12 @@ if not st.session_state.authenticated:
 curr_user = st.session_state.user_key
 user_config = USERS[curr_user]
 
-# Récupération Supabase
 h_data = supabase.table("heures").select("*").eq("user", curr_user).execute().data
 c_data = supabase.table("conges").select("*").eq("user", curr_user).execute().data
 
 u_a = pd.DataFrame(h_data) if h_data else pd.DataFrame(columns=['id', 'date', 'val'])
 u_c = pd.DataFrame(c_data) if c_data else pd.DataFrame(columns=['id', 'date', 'type', 'group_id'])
 
-# Calculs
 try:
     du = calculate_metrics(u_c.copy(), st.session_state.solidarity_date)
     h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
@@ -158,7 +170,6 @@ st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonj
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / float(h_contrat), 0.0), 1.0))
 
-# Carte Balance
 status_color = "pos" if delta >= 0 else "neg"
 st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
 
@@ -169,7 +180,7 @@ st.markdown("#### 📅 Jours Fériés")
 fr_h = get_fr_holidays([datetime.now().year])
 badges = []
 for d_h, name in sorted(fr_h.items()):
-    if date.today() <= d_h <= (date.today() + timedelta(days=30)): # Étendu à 30 jours
+    if date.today() <= d_h <= (date.today() + timedelta(days=30)):
         badges.append(f'<span class="holiday-badge">{d_h.strftime("%d/%m")} : {name}</span>')
 
 if badges:
@@ -185,7 +196,7 @@ with st.expander("⚙️ Journée de solidarité"):
 
 st.write("")
 
-# --- 8. SAISIE DES DONNÉES ---
+# --- 8. SAISIE DES DONNÉES & HISTORIQUE ---
 t1, t2 = st.tabs(["⚡ Heures supp", "🌴 Congés / Arret"])
 
 with t1:
@@ -203,9 +214,9 @@ with t1:
     
     if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            cx, cy = st.columns([0.85, 0.15])
-            cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-            if cy.button("🗑️", key=f"h_{row['id']}"):
+            col1, col2 = st.columns([0.8, 0.2])
+            col1.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+            if col2.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
                 supabase.table("heures").delete().eq("id", row['id']).execute()
                 st.rerun()
 
@@ -214,7 +225,7 @@ with t2:
     if not mode_periode:
         d_u = st.date_input("Jour", date.today())
         half = st.checkbox("Demi-journée")
-        if st.button("Enregistrer"):
+        if st.button("Enregistrer", use_container_width=True):
             if d_u.weekday() < 5:
                 supabase.table("conges").insert({"user": curr_user, "date": str(d_u), "type": 0.5 if half else 1.0, "group_id": str(uuid.uuid4())}).execute()
                 st.rerun()
@@ -222,7 +233,7 @@ with t2:
         cs, ce = st.columns(2)
         ds = cs.date_input("Début", date.today())
         de = ce.date_input("Fin", date.today() + timedelta(days=1))
-        if st.button("Enregistrer période"):
+        if st.button("Enregistrer période", use_container_width=True):
             gid = str(uuid.uuid4())
             days = pd.date_range(ds, de, freq='D').date
             rows = [{"user": curr_user, "date": str(day), "type": 1.0, "group_id": gid} for day in days if day.weekday() < 5]
@@ -230,14 +241,16 @@ with t2:
                 supabase.table("conges").insert(rows).execute()
                 st.rerun()
 
+    st.write("")
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            cx, cy = st.columns([0.85, 0.15])
+            col1, col2 = st.columns([0.8, 0.2])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
-            cx.markdown(f"<div style='background:rgba(255,255,255,0.03); padding:12px; border-radius:12px; margin-bottom:8px;'>🌴 {lbl}</div>", unsafe_allow_html=True)
-            if cy.button("🗑️", key=f"g_{gid}"):
+            
+            col1.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            if col2.button("🗑️", key=f"g_{gid}", use_container_width=True):
                 supabase.table("conges").delete().eq("group_id", gid).execute()
                 st.rerun()
