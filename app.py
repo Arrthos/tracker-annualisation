@@ -11,7 +11,7 @@ import os
 # --- 1. CONFIGURATION & SESSION STATE ---
 st.set_page_config(page_title="Annualisation Gamba Rota", layout="centered")
 
-# Initialisation critique (doit être en haut)
+# Initialisation critique
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_key' not in st.session_state:
@@ -19,7 +19,7 @@ if 'user_key' not in st.session_state:
 if 'solidarity_date' not in st.session_state:
     st.session_state.solidarity_date = date(2026, 5, 25)
 
-# --- 2. CSS DESIGN (Optimisé pour l'alignement Mobile) ---
+# --- 2. CSS DESIGN ---
 design_css = """
     <style>
     .stApp { background-color: #000000 !important; color: #EAEAEA; }
@@ -59,7 +59,6 @@ design_css = """
         border: 1px solid rgba(52, 152, 219, 0.2);
     }
 
-    /* Ligne d'historique avec texte qui s'adapte à la largeur */
     .history-row {
         background: rgba(255,255,255,0.03); 
         padding: 10px; 
@@ -72,15 +71,21 @@ design_css = """
         overflow: hidden;
     }
     
-    /* Supprime les marges inutiles des colonnes sur mobile */
     [data-testid="column"] {
         padding: 0 5px !important;
+    }
+
+    /* TRICHE CSS POUR MOBILE : Aligner le bouton sur la ligne du dessus si empilé */
+    @media (max-width: 640px) {
+        div[data-testid="column"]+div[data-testid="column"] button {
+            margin-top: -55px !important;
+        }
     }
     </style>
 """
 st.markdown(design_css, unsafe_allow_html=True)
 
-# --- 3. FONCTIONS LOGIQUE ---
+# --- 3. FONCTIONS ---
 @st.cache_resource
 def get_supabase(): 
     return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
@@ -205,20 +210,15 @@ with t1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
     
-   if not u_a.empty:
+    if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            # On utilise une seule colonne pour tout tenir
-            container = st.container()
-            with container:
-                col_left, col_right = st.columns([0.8, 0.2])
-                with col_left:
-                    st.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-                with col_right:
-                    # On ajoute une petite marge négative pour remonter le bouton sur mobile
-                    st.markdown('<style>div[data-testid="column"]+div[data-testid="column"] button {margin-top: -55px;}</style>', unsafe_allow_html=True)
-                    if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
-                        supabase.table("heures").delete().eq("id", row['id']).execute()
-                        st.rerun()
+            col_left, col_right = st.columns([0.8, 0.2])
+            with col_left:
+                st.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+            with col_right:
+                if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
+                    supabase.table("heures").delete().eq("id", row['id']).execute()
+                    st.rerun()
 
 with t2:
     mode_p = st.toggle("Mode Période", value=False)
@@ -241,7 +241,7 @@ with t2:
                 st.rerun()
 
     st.write("")
-   if not u_c.empty:
+    if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
             col_left, col_right = st.columns([0.8, 0.2])
@@ -252,7 +252,6 @@ with t2:
             with col_left:
                 st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
             with col_right:
-                st.markdown('<style>div[data-testid="column"]+div[data-testid="column"] button {margin-top: -55px;}</style>', unsafe_allow_html=True)
                 if st.button("🗑️", key=f"g_{gid}", use_container_width=True):
                     supabase.table("conges").delete().eq("group_id", gid).execute()
                     st.rerun()
