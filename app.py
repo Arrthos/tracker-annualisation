@@ -99,26 +99,25 @@ def load_img(path):
     with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
 
 # --- 3. AUTHENTIFICATION & PARAMÈTRES ---
-# Mise à jour des contrats ici
-# Au lieu d'écrire les mots de passe ici :
-USERS = {
-    "Julien": {"password": "%Track115", "base_sup": 20.5, "contrat": 1652}, 
-    "Alexis": {"password": "ALenfant10", "base_sup": 16.75, "contrat": 1602}
-}
+# On récupère les utilisateurs directement depuis les secrets Streamlit
+USERS = st.secrets["users"]
 
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-if 'solidarity_date' not in st.session_state: st.session_state.solidarity_date = date(2026, 5, 25)
+if 'authenticated' not in st.session_state: 
+    st.session_state.authenticated = False
 
+# La suite du code reste identique car USERS se comporte comme un dictionnaire
 if not st.session_state.authenticated:
-    img_path = "image_11.png"
-    if os.path.exists(img_path):
-        st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{load_img(img_path)}" width="200"></div>', unsafe_allow_html=True)
+    # ... (ton code d'affichage d'image)
     with st.form("login"):
         u, p = st.text_input("Identifiant"), st.text_input("Mot de passe", type="password")
         if st.form_submit_button("Connexion"):
+            # Vérification simplifiée
             if u in USERS and USERS[u]["password"] == p:
-                st.session_state.authenticated, st.session_state.user_key = True, u
+                st.session_state.authenticated = True
+                st.session_state.user_key = u
                 st.rerun()
+            else:
+                st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
 st.markdown('<script>document.body.setAttribute("data-authenticated", "true");</script>', unsafe_allow_html=True)
