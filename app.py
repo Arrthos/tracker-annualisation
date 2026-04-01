@@ -205,13 +205,20 @@ with t1:
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
                 st.rerun()
     
-    if not u_a.empty:
+   if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            c1, c2 = st.columns([0.82, 0.18])
-            c1.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-            if c2.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
-                supabase.table("heures").delete().eq("id", row['id']).execute()
-                st.rerun()
+            # On utilise une seule colonne pour tout tenir
+            container = st.container()
+            with container:
+                col_left, col_right = st.columns([0.8, 0.2])
+                with col_left:
+                    st.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+                with col_right:
+                    # On ajoute une petite marge négative pour remonter le bouton sur mobile
+                    st.markdown('<style>div[data-testid="column"]+div[data-testid="column"] button {margin-top: -55px;}</style>', unsafe_allow_html=True)
+                    if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
+                        supabase.table("heures").delete().eq("id", row['id']).execute()
+                        st.rerun()
 
 with t2:
     mode_p = st.toggle("Mode Période", value=False)
@@ -234,15 +241,18 @@ with t2:
                 st.rerun()
 
     st.write("")
-    if not u_c.empty:
+   if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
-            c1, c2 = st.columns([0.82, 0.18])
+            col_left, col_right = st.columns([0.8, 0.2])
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m')} → {e.strftime('%d/%m')}" if len(data) > 1 else f"{s.strftime('%d/%m')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
             
-            c1.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
-            if c2.button("🗑️", key=f"g_{gid}", use_container_width=True):
-                supabase.table("conges").delete().eq("group_id", gid).execute()
-                st.rerun()
+            with col_left:
+                st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            with col_right:
+                st.markdown('<style>div[data-testid="column"]+div[data-testid="column"] button {margin-top: -55px;}</style>', unsafe_allow_html=True)
+                if st.button("🗑️", key=f"g_{gid}", use_container_width=True):
+                    supabase.table("conges").delete().eq("group_id", gid).execute()
+                    st.rerun()
