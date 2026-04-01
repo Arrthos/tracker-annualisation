@@ -45,10 +45,17 @@ design_css = """
         font-weight: 500;
     }
 
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #3498DB, #2ECC71);
-        height: 10px;
-        border-radius: 5px;
+    .holiday-badge {
+        display: inline-block;
+        background: rgba(52, 152, 219, 0.12);
+        color: #3498DB;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        border: 1px solid rgba(52, 152, 219, 0.2);
     }
 
     .history-row {
@@ -62,10 +69,8 @@ design_css = """
         font-size: 0.9rem;
     }
     
-    /* Force l'alignement du bouton poubelle sur mobile */
     [data-testid="column"] button {
         height: 48px !important;
-        margin-top: 0px !important;
     }
     </style>
 """
@@ -108,12 +113,6 @@ def calculate_metrics(df_conges, solidarity_day):
     
     return df['h_theo'].sum()
 
-def load_img(path):
-    if os.path.exists(path):
-        with open(path, "rb") as f: 
-            return base64.b64encode(f.read()).decode()
-    return None
-
 # --- 4. AUTHENTIFICATION ---
 try:
     USERS = st.secrets["users"]
@@ -123,9 +122,6 @@ except Exception:
     st.stop()
 
 if not st.session_state.authenticated:
-    img_base64 = load_img("image_11.png")
-    if img_base64:
-        st.markdown(f'<div style="display:flex;justify-content:center;margin-top:40px;"><img src="data:image/png;base64,{img_base64}" width="160"></div>', unsafe_allow_html=True)
     with st.form("login"):
         u = st.text_input("Identifiant")
         p = st.text_input("Mot de passe", type="password")
@@ -134,8 +130,7 @@ if not st.session_state.authenticated:
                 st.session_state.authenticated = True
                 st.session_state.user_key = u
                 st.rerun()
-            else:
-                st.error("Échec")
+            else: st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
 # --- 5. CHARGEMENT & CALCULS ---
@@ -151,8 +146,6 @@ h_sup_total = u_a['val'].astype(float).sum() if not u_a.empty else 0
 delta = user_cfg["base_sup"] + h_sup_total
 fait = du + delta
 h_contrat = user_cfg["contrat"]
-
-# Calcul des jours de récup (sur une base moyenne de 7.2h par jour)
 jours_recup = delta / 7.2
 
 # --- 6. DASHBOARD ---
@@ -171,16 +164,27 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
+# --- 7. JOURS FÉRIÉS À VENIR (15 jours) ---
+fr_h = get_fr_holidays([datetime.now().year, datetime.now().year + 1])
+badges = []
+today = date.today()
+for d_h, name in sorted(fr_h.items()):
+    if today <= d_h <= (today + timedelta(days=15)):
+        badges.append(f'<span class="holiday-badge">{d_h.strftime("%d/%m/%Y")} : {name}</span>')
+
+if badges:
+    st.markdown(f'<div style="text-align:center; margin-bottom:20px;">{" ".join(badges)}</div>', unsafe_allow_html=True)
+
 st.write("---")
 
-# --- 7. PARAMÈTRES ---
-with st.expander("⚙️ Paramètres"):
+# --- 8. PARAMÈTRES ---
+with st.expander("⚙️ Paramètres & Solidarité"):
     new_sol = st.date_input("Journée de solidarité :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
         st.session_state.solidarity_date = new_sol
         st.rerun()
 
-# --- 8. ONGLETS ---
+# --- 9. ONGLETS ---
 t1, t2 = st.tabs(["⚡ Heures supp", "🌴 Congés / Arret"])
 
 with t1:
@@ -189,8 +193,7 @@ with t1:
             typ = st.radio("Sens", ["Plus (+)", "Moins (-)"], horizontal=True)
             d = st.date_input("Date", date.today())
             h_col, m_col = st.columns(2)
-            hv = h_col.number_input("H", 0, 12, 0)
-            mv = m_col.number_input("M", 0, 59, 0)
+            hv = h_col.number_input("H", 0, 12, 0); mv = m_col.number_input("M", 0, 59, 0)
             if st.form_submit_button("Valider", use_container_width=True):
                 val = (hv + mv/60) * (-1 if "Moins" in typ else 1)
                 supabase.table("heures").insert({"user": curr_user, "date": str(d), "val": val}).execute()
@@ -198,11 +201,9 @@ with t1:
     
     if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            date_str = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
             c1, c2 = st.columns([0.8, 0.2])
-            with c1:
-                st.markdown(f"<div class='history-row'>📅 {date_str} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
-            with c2:
+            with c1: st.markdown(f"<div class='history-row'>📅 {pd.to_datetime(row['date']).strftime('%d/%m/%Y')} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+            with c2: 
                 if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
                     supabase.table("heures").delete().eq("id", row['id']).execute()
                     st.rerun()
@@ -227,17 +228,14 @@ with t2:
                 supabase.table("conges").insert(rows).execute()
                 st.rerun()
 
-    st.write("")
     if not u_c.empty:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
             s, e = data['dt'].min(), data['dt'].max()
             lbl = f"{s.strftime('%d/%m/%Y')} → {e.strftime('%d/%m/%Y')}" if len(data) > 1 else f"{s.strftime('%d/%m/%Y')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
-            
             c1, c2 = st.columns([0.8, 0.2])
-            with c1:
-                st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
+            with c1: st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
             with c2:
                 if st.button("🗑️", key=f"g_{gid}", use_container_width=True):
                     supabase.table("conges").delete().eq("group_id", gid).execute()
