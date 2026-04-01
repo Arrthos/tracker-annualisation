@@ -103,7 +103,8 @@ def load_img(path):
 # Au lieu d'écrire les mots de passe ici :
 USERS = {
     "Julien": {"password": "%Track115", "base_sup": 20.5, "contrat": 1652}, 
-    "Alexis": {"password": "ALenfant10", "base_sup": 16.75, "contrat": 1602}
+    "Alexis": {"password": "ALenfant10", "base_sup": 16.75, "contrat": 1602},
+    "Coralie": {"password": "CMartinot10", "base_sup":0, "contrat": 1652}
 }
 
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
