@@ -34,9 +34,16 @@ design_css = """
         margin: 15px 0;
     }
 
-    .balance-val { font-size: 5.5rem; font-weight: 800; letter-spacing: -3px; margin: 5px 0; }
+    .balance-val { font-size: 5rem; font-weight: 800; letter-spacing: -3px; margin: 5px 0; line-height: 1; }
     .pos { color: #2ECC71; }
     .neg { color: #FF4B4B; }
+
+    .recup-text {
+        font-size: 1.1rem;
+        color: #9BA1B0;
+        margin-top: 10px;
+        font-weight: 500;
+    }
 
     .stProgress > div > div > div > div {
         background: linear-gradient(90deg, #3498DB, #2ECC71);
@@ -44,30 +51,21 @@ design_css = """
         border-radius: 5px;
     }
 
-    /* Style pour les lignes d'historique compactes */
-    .history-container {
+    .history-row {
         background: rgba(255,255,255,0.03); 
-        padding: 8px 12px; 
+        padding: 10px; 
         border-radius: 10px; 
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
+        display: flex; 
         align-items: center;
-        border: 1px solid rgba(255,255,255,0.05);
+        height: 48px;
+        margin-bottom: 4px;
+        font-size: 0.9rem;
     }
     
-    .history-text {
-        font-size: 0.95rem;
-        flex-grow: 1;
-    }
-
-    /* Ajustement spécifique pour les boutons de suppression */
-    div.stButton > button[key^="h_"], div.stButton > button[key^="g_"] {
-        padding: 0px 10px !important;
-        height: 35px !important;
-        width: 45px !important;
-        background-color: rgba(255, 75, 75, 0.1) !important;
-        border: 1px solid rgba(255, 75, 75, 0.2) !important;
+    /* Force l'alignement du bouton poubelle sur mobile */
+    [data-testid="column"] button {
+        height: 48px !important;
+        margin-top: 0px !important;
     }
     </style>
 """
@@ -154,17 +152,29 @@ delta = user_cfg["base_sup"] + h_sup_total
 fait = du + delta
 h_contrat = user_cfg["contrat"]
 
+# Calcul des jours de récup (sur une base moyenne de 7.2h par jour)
+jours_recup = delta / 7.2
+
 # --- 6. DASHBOARD ---
 st.markdown(f"<p style='text-align:center; color:#9BA1B0; margin-bottom:0;'>Bonjour,</p><h2 style='text-align:center; margin-top:0;'>{curr_user}</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align:center; margin-bottom:5px;'><small>Progression : <b>{int(fait)}</b> / {h_contrat}h</small></p>", unsafe_allow_html=True)
 st.progress(min(max(fait / float(h_contrat), 0.0), 1.0))
+
 status_color = "pos" if delta >= 0 else "neg"
-st.markdown(f'<div class="glass-card"><small style="color:#9BA1B0">BALANCE HEURES SUP.</small><div class="balance-val {status_color}">{to_hm(delta)}</div></div>', unsafe_allow_html=True)
+st.markdown(f"""
+    <div class="glass-card">
+        <small style="color:#9BA1B0">BALANCE HEURES SUP.</small>
+        <div class="balance-val {status_color}">{to_hm(delta)}</div>
+        <div class="recup-text">
+            {f'✨ Soit environ <b>{jours_recup:.1f}</b> jours de récup' if delta > 0 else '☕ Pas encore de récup possible'}
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 7. FÉRIÉS ---
-with st.expander("📅 Jours Fériés & Paramètres"):
+# --- 7. PARAMÈTRES ---
+with st.expander("⚙️ Paramètres"):
     new_sol = st.date_input("Journée de solidarité :", st.session_state.solidarity_date)
     if new_sol != st.session_state.solidarity_date:
         st.session_state.solidarity_date = new_sol
@@ -188,13 +198,12 @@ with t1:
     
     if not u_a.empty:
         for _, row in u_a.sort_values('date', ascending=False).iterrows():
-            # Affichage en une seule ligne sans st.columns pour mobile
             date_str = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
-            c1, c2 = st.columns([0.85, 0.15])
+            c1, c2 = st.columns([0.8, 0.2])
             with c1:
-                st.markdown(f"<div class='history-row'>📅 {date_str} : <b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='history-row'>📅 {date_str} : &nbsp;<b>{to_hm(row['val'])}</b></div>", unsafe_allow_html=True)
             with c2:
-                if st.button("🗑️", key=f"h_{row['id']}"):
+                if st.button("🗑️", key=f"h_{row['id']}", use_container_width=True):
                     supabase.table("heures").delete().eq("id", row['id']).execute()
                     st.rerun()
 
@@ -223,16 +232,13 @@ with t2:
         u_c['dt'] = pd.to_datetime(u_c['date'])
         for gid, data in u_c.sort_values('dt', ascending=False).groupby('group_id', sort=False):
             s, e = data['dt'].min(), data['dt'].max()
-            if len(data) > 1:
-                lbl = f"{s.strftime('%d/%m/%Y')} → {e.strftime('%d/%m/%Y')}"
-            else:
-                lbl = f"{s.strftime('%d/%m/%Y')}"
+            lbl = f"{s.strftime('%d/%m/%Y')} → {e.strftime('%d/%m/%Y')}" if len(data) > 1 else f"{s.strftime('%d/%m/%Y')}"
             if len(data) == 1 and data.iloc[0]['type'] == 0.5: lbl += " (1/2)"
             
-            c1, c2 = st.columns([0.85, 0.15])
+            c1, c2 = st.columns([0.8, 0.2])
             with c1:
                 st.markdown(f"<div class='history-row'>🌴 {lbl}</div>", unsafe_allow_html=True)
             with c2:
-                if st.button("🗑️", key=f"g_{gid}"):
+                if st.button("🗑️", key=f"g_{gid}", use_container_width=True):
                     supabase.table("conges").delete().eq("group_id", gid).execute()
                     st.rerun()
